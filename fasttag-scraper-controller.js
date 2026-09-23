@@ -281,13 +281,14 @@
                 return;
             }
 
-            const isDark = dependencies.getEffectiveTheme() === "dark";
-            const sources = typeof dependencies.loadScraperSources === "function"
+            const isDark = typeof dependencies?.getEffectiveTheme === "function" ? dependencies.getEffectiveTheme() === "dark" : true;
+            const sources = typeof dependencies?.loadScraperSources === "function"
                 ? await dependencies.loadScraperSources()
                 : { stashBoxes: [], scrapers: [], all: [] };
-            const activeSource = typeof dependencies.resolveActiveSource === "function"
+            const activeSource = typeof dependencies?.resolveActiveSource === "function"
                 ? dependencies.resolveActiveSource(sources)
                 : (sources.all?.[0] || { id: "stashbox_0", name: "StashDB.org" });
+            const escapeFn = typeof dependencies?.escapeHtml === "function" ? dependencies.escapeHtml :  (s => String(s || ""));
 
             const menu = root.document.createElement("div");
             menu.id = "fasttag-source-dropdown-menu";
@@ -309,7 +310,7 @@
                     html += `
                         <div class="fasttag-source-menu-item" data-source-id="${box.id}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
                             <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                <span>🌐</span><span title="${dependencies.escapeHtml(box.name)}">${dependencies.escapeHtml(box.name)}</span>
+                                <span>🌐</span><span title="${escapeFn(box.name)}">${escapeFn(box.name)}</span>
                             </span>
                             ${isSelected ? '<span style="color:#6366f1; font-weight:800; font-size:12px;">✓</span>' : ''}
                         </div>
@@ -327,7 +328,7 @@
                     html += `
                         <div class="fasttag-source-menu-item" data-source-id="${scraper.id}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
                             <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                <span>⚡</span><span title="${dependencies.escapeHtml(scraper.name)}">${dependencies.escapeHtml(scraper.name)}</span>
+                                <span>⚡</span><span title="${escapeFn(scraper.name)}">${escapeFn(scraper.name)}</span>
                             </span>
                             ${isSelected ? '<span style="color:#6366f1; font-weight:800; font-size:12px;">✓</span>' : ''}
                         </div>
@@ -841,6 +842,32 @@
         const activeSource = typeof dependencies.resolveActiveSource === 'function'
             ? dependencies.resolveActiveSource(availableSources)
             : { id: 'stashbox_0', name: 'StashDB.org', shortName: 'StashDB' };
+
+        const handleSourceChange = async (newSourceId) => {
+            if (typeof dependencies?.setActiveScraperSource === 'function') {
+                dependencies.setActiveScraperSource(newSourceId);
+            }
+            const newRequestId = beginRequest(popup, sceneId);
+            if (newRequestId == null) return;
+            showLoadingState(targetContainer, isDetached);
+            try {
+                const newResults = await (dependencies.fetchScraperMatchesForScene || fetchScraperMatchesForScene)(
+                    sceneId,
+                    null,
+                    '',
+                    () => isRequestCurrent(popup, sceneId, newRequestId),
+                    newSourceId
+                );
+                if (!isRequestCurrent(popup, sceneId, newRequestId)) return;
+                sessionCache.set(sceneId, newResults);
+                hideScrapeCoverTooltip();
+                await renderMatches(container, newResults, sceneId, ctx, popup, onDismiss, '', newRequestId);
+            } catch (error) {
+                if (!isRequestCurrent(popup, sceneId, newRequestId)) return;
+                toastError('Scrape failed: ' + (error?.message || error));
+                await renderMatches(container, [], sceneId, ctx, popup, onDismiss, '', newRequestId);
+            }
+        };
 
         if (!hasResults) {
             const initialQuery = cleanTitleForScraping(emptySearchQuery || '');
@@ -1386,7 +1413,9 @@
                 scraperHeaderActions.style.justifySelf = 'auto';
                 const availableWidth = scraperHeader.clientWidth || targetContainer.getBoundingClientRect?.().width || targetContainer.clientWidth || 0;
                 const tight = getScraperHeaderDensity(availableWidth) === 'tight';
-                if (scraperSourceLabelElement) scraperSourceLabelElement.style.display = tight ? 'none' : '';
+                if (scraperSourceLabelElement) {
+                    scraperSourceLabelElement.style.maxWidth = tight ? '68px' : '95px';
+                }
                 if (scraperDockLabelElement) scraperDockLabelElement.style.display = tight ? 'none' : '';
                 if (scraperMatchCounterElement) {
                     scraperMatchCounterElement.style.width = tight ? '82px' : '92px';
@@ -1545,6 +1574,12 @@
             if (isDetached && floatingScraperHudElement) {
                 const headerEl = targetContainer.querySelector('#fasttag-scrape-header');
                 attachHudDragging(floatingScraperHudElement, headerEl);
+            }
+
+            // Wire scraper source switcher button
+            const sourceBtn = targetContainer.querySelector('#fasttag-scrape-source-btn');
+            if (sourceBtn) {
+                attachSourceDropdown(sourceBtn, popup, sceneId, handleSourceChange);
             }
 
             // Wire vertical resize dragging (allows smooth split resizing between scraper card and tags table)

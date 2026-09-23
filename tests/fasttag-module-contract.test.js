@@ -149,7 +149,7 @@ assert.ok(scraperControllerSource.includes("const scraperSourceLabel = scraperSo
 assert.ok(scraperControllerSource.includes('title="${escapeHtml(scraperSourceName)}">${escapeHtml(scraperSourceLabel)}</span>'), 'the scraper header should identify its source without implying that the candidate is a confirmed match');
 assert.ok(scraperControllerSource.includes("scraperHeader.style.display = 'flex';"), 'each scraper header measurement should begin from its normal single-row layout');
 assert.equal(scraperControllerSource.includes("scraperHeader.style.display = 'grid';"), false, 'the scraper header must never switch into a second row');
-assert.ok(scraperControllerSource.includes("scraperSourceLabelElement.style.display = tight ? 'none' : '';"), 'very narrow headers should reclaim space from redundant source text');
+assert.ok(scraperControllerSource.includes("scraperSourceLabelElement.style.maxWidth = tight ? '68px' : '95px';"), 'very narrow headers should compact the scraper source label');
 assert.ok(scraperControllerSource.includes("scraperDockLabelElement.style.display = tight ? 'none' : '';"), 'very narrow headers should keep the Dock icon while reclaiming its label width');
 assert.ok(scraperControllerSource.includes('flex-shrink: 0; max-width: 100%; margin-left: auto;'), 'scraper actions must remain inside the single-row HUD header');
 assert.ok(scraperControllerSource.includes('>✕ Dismiss</button>'), 'result dismissal should be clearly labelled away from the navigation arrows');
