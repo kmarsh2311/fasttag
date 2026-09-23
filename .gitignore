@@ -1,0 +1,14 @@
+# Python & OS artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+*.lock
+.DS_Store
+.idea/
+.vscode/
+dist/
+
+# Scratch & backup files
+*copy.py
+*.bak
