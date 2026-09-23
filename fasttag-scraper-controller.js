@@ -926,7 +926,13 @@
         };
 
         if (!hasResults) {
-            const initialQuery = cleanTitleForScraping(emptySearchQuery || '');
+            let initialQuery = cleanTitleForScraping(emptySearchQuery || '');
+            if (!initialQuery && popup) {
+                const titleCandidate = popup._context?.activeScene?.title
+                    || popup.element?.querySelector?.('.title, .card-title, .scene-card__title')?.textContent
+                    || '';
+                if (titleCandidate) initialQuery = cleanTitleForScraping(titleCandidate);
+            }
             targetContainer.innerHTML = `
                 <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; box-sizing: border-box; height: 100%; min-height: 150px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">

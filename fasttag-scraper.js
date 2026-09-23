@@ -224,7 +224,14 @@
         const finalBoxes = boxes.length > 0 ? boxes : [defaultBox];
 
         const scrapers = (Array.isArray(installedScrapers) ? installedScrapers : [])
-            .filter(scraper => scraper && scraper.id && scraper.id !== "builtin_autotag")
+            .filter(scraper => {
+                if (!scraper || !scraper.id || scraper.id === "builtin_autotag") return false;
+                const supported = scraper.scene?.supported_scrapes;
+                if (Array.isArray(supported) && supported.length > 0 && !supported.includes("NAME")) {
+                    return false;
+                }
+                return true;
+            })
             .map(scraper => {
                 const id = String(scraper.id).trim();
                 const rawName = String(scraper.name || "").trim() || id;
@@ -256,7 +263,7 @@
         try {
             const [boxRes, scraperRes] = await Promise.all([
                 fetchGQL("query FastTagScraperSources { configuration { general { stashBoxes { endpoint name } } } }").catch(() => null),
-                fetchGQL("query FastTagInstalledScrapers { listScrapers(types: [SCENE]) { id name } }").catch(() => null)
+                fetchGQL("query FastTagInstalledScrapers { listScrapers(types: [SCENE]) { id name scene { supported_scrapes } } }").catch(() => null)
             ]);
             stashBoxes = boxRes?.data?.configuration?.general?.stashBoxes || [];
             installedScrapers = scraperRes?.data?.listScrapers || [];
