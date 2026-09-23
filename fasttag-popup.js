@@ -338,6 +338,7 @@
                 if (e.target && (
                     form.contains(e.target) ||
                     e.target.closest('#fasttag-sort-dropdown-menu') ||
+                    e.target.closest('#fasttag-source-dropdown-menu') ||
                     e.target.closest('#fasttag-floating-video-hud') ||
                     e.target.closest('#fasttag-floating-scraper-hud') ||
                     e.target.closest('#fasttag-cover-editor-hud') ||
@@ -371,8 +372,14 @@
                 (scraperHud && scraperHud.contains(el)) ||
                 (videoHud && videoHud.contains(el)) ||
                 (coverEditorHud && coverEditorHud.contains(el)) ||
-                (settingsModal && settingsModal.contains(el))
+                (settingsModal && settingsModal.contains(el)) ||
+                (el && el.closest && el.closest('#fasttag-source-dropdown-menu'))
             );
+
+            // Allow source dropdown menu to scroll naturally
+            if (e.target.closest('#fasttag-source-dropdown-menu')) {
+                return;
+            }
 
             // 1. Allow video player & preview containers to handle mouse wheel freely for frame scrubbing
             if (e.target.closest('[id$="-preview-container"], .fasttag-video-preview, video, #fasttag-floating-video-hud, #fasttag-cover-editor-hud #fasttag-media-container, #fasttag-video-container, #fasttag-video-element')) {

@@ -288,27 +288,38 @@
             const activeSource = typeof dependencies?.resolveActiveSource === "function"
                 ? dependencies.resolveActiveSource(sources)
                 : (sources.all?.[0] || { id: "stashbox_0", name: "StashDB.org" });
-            const escapeFn = typeof dependencies?.escapeHtml === "function" ? dependencies.escapeHtml :  (s => String(s || ""));
+            const escapeFn = typeof dependencies?.escapeHtml === "function" ? dependencies.escapeHtml : (s => String(s || ""));
 
             const menu = root.document.createElement("div");
             menu.id = "fasttag-source-dropdown-menu";
-            menu.style.cssText = "position: fixed; z-index: 10000002; background: " + (isDark ? "#0f172a" : "#ffffff") + "; border: 1px solid " + (isDark ? "rgba(129, 140, 248, 0.45)" : "#a5b4fc") + "; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 5px; min-width: 190px; max-width: 260px; max-height: 280px; overflow-y: auto; font-family: system-ui, -apple-system, sans-serif; font-size: 11px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;";
+            menu.style.cssText = "position: fixed; z-index: 10000002; background: " + (isDark ? "#0f172a" : "#ffffff") + "; border: 1px solid " + (isDark ? "rgba(129, 140, 248, 0.45)" : "#a5b4fc") + "; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 6px; min-width: 220px; max-width: 280px; max-height: 360px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; overflow: hidden;";
 
             const rect = triggerBtn.getBoundingClientRect();
             let top = rect.bottom + 4;
             let left = rect.left;
-            if (top + 280 > root.innerHeight) top = Math.max(8, rect.top - 285);
-            if (left + 220 > root.innerWidth) left = Math.max(8, root.innerWidth - 230);
+            if (top + 360 > root.innerHeight) top = Math.max(8, rect.top - 365);
+            if (left + 260 > root.innerWidth) left = Math.max(8, root.innerWidth - 270);
             menu.style.top = top + "px";
             menu.style.left = left + "px";
 
-            let html = "";
+            // Prevent clicks, mousedown, or wheel from triggering outside handlers or Stash actions
+            menu.addEventListener("mousedown", (e) => e.stopPropagation());
+            menu.addEventListener("click", (e) => e.stopPropagation());
+            menu.addEventListener("wheel", (e) => e.stopPropagation(), { passive: false });
+
+            let html = `
+                <div style="padding: 1px 2px 4px 2px; border-bottom: 1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}; flex-shrink: 0;">
+                    <input id="fasttag-source-search-input" type="text" placeholder="Search scrapers…" autocomplete="off" style="width: 100%; box-sizing: border-box; height: 26px; padding: 3px 8px; border-radius: 5px; border: 1px solid ${isDark ? "rgba(129, 140, 248, 0.45)" : "#a5b4fc"}; background: ${isDark ? "#1e293b" : "#f1f5f9"}; color: ${isDark ? "#e0e7ff" : "#1e293b"}; font-size: 11px; outline: none;">
+                </div>
+                <div id="fasttag-source-list-scroll" style="overflow-y: auto; max-height: 290px; display: flex; flex-direction: column; gap: 2px; padding-right: 2px;">
+            `;
+
             if (sources.stashBoxes && sources.stashBoxes.length > 0) {
-                html += "<div style=\"padding: 4px 6px 2px 6px; font-size: 9px; font-weight: 800; color: " + (isDark ? "#818cf8" : "#4f46e5") + "; letter-spacing: 0.5px; text-transform: uppercase;\">Stash-box Endpoints</div>";
+                html += `<div class="fasttag-source-section-header" data-section="stashbox" style="padding: 4px 6px 2px 6px; font-size: 9px; font-weight: 800; color: ${isDark ? "#818cf8" : "#4f46e5"}; letter-spacing: 0.5px; text-transform: uppercase;">Stash-box Endpoints</div>`;
                 sources.stashBoxes.forEach(box => {
                     const isSelected = activeSource.id === box.id || activeSource.index === box.index;
                     html += `
-                        <div class="fasttag-source-menu-item" data-source-id="${box.id}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
+                        <div class="fasttag-source-menu-item" data-source-id="${escapeFn(box.id)}" data-source-name="${escapeFn(box.name).toLowerCase()}" data-source-type="stashbox" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
                             <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                 <span>🌐</span><span title="${escapeFn(box.name)}">${escapeFn(box.name)}</span>
                             </span>
@@ -319,14 +330,12 @@
             }
 
             if (sources.scrapers && sources.scrapers.length > 0) {
-                if (sources.stashBoxes && sources.stashBoxes.length > 0) {
-                    html += "<div style=\"height: 1px; background: " + (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") + "; margin: 3px 0;\"></div>";
-                }
-                html += "<div style=\"padding: 4px 6px 2px 6px; font-size: 9px; font-weight: 800; color: " + (isDark ? "#94a3b8" : "#64748b") + "; letter-spacing: 0.5px; text-transform: uppercase;\">Installed Scrapers</div>";
+                html += `<div class="fasttag-source-section-sep" style="height: 1px; background: ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}; margin: 3px 0;"></div>`;
+                html += `<div class="fasttag-source-section-header" data-section="installed" style="padding: 4px 6px 2px 6px; font-size: 9px; font-weight: 800; color: ${isDark ? "#94a3b8" : "#64748b"}; letter-spacing: 0.5px; text-transform: uppercase;">Installed Scrapers</div>`;
                 sources.scrapers.forEach(scraper => {
                     const isSelected = activeSource.id === scraper.id || activeSource.scraperId === scraper.scraperId;
                     html += `
-                        <div class="fasttag-source-menu-item" data-source-id="${scraper.id}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
+                        <div class="fasttag-source-menu-item" data-source-id="${escapeFn(scraper.id)}" data-source-name="${escapeFn(scraper.name).toLowerCase()}" data-source-type="installed" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
                             <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                 <span>⚡</span><span title="${escapeFn(scraper.name)}">${escapeFn(scraper.name)}</span>
                             </span>
@@ -336,10 +345,63 @@
                 });
             }
 
+            html += `
+                <div id="fasttag-source-empty-msg" style="display: none; padding: 10px 8px; text-align: center; color: ${isDark ? "#94a3b8" : "#64748b"}; font-size: 10.5px;">No scrapers found</div>
+                </div>
+            `;
+
             menu.innerHTML = html;
             root.document.body.appendChild(menu);
 
-            menu.querySelectorAll(".fasttag-source-menu-item").forEach(item => {
+            const searchInput = menu.querySelector("#fasttag-source-search-input");
+            const items = menu.querySelectorAll(".fasttag-source-menu-item");
+            const emptyMsg = menu.querySelector("#fasttag-source-empty-msg");
+            const sep = menu.querySelector(".fasttag-source-section-sep");
+            const headerBox = menu.querySelector('[data-section="stashbox"]');
+            const headerInstalled = menu.querySelector('[data-section="installed"]');
+
+            if (searchInput) {
+                searchInput.addEventListener("input", () => {
+                    const q = (searchInput.value || "").trim().toLowerCase();
+                    let visibleBox = 0;
+                    let visibleInstalled = 0;
+
+                    items.forEach(item => {
+                        const name = (item.dataset.sourceName || "").toLowerCase();
+                        const matches = !q || name.includes(q);
+                        item.style.display = matches ? "flex" : "none";
+                        if (matches) {
+                            if (item.dataset.sourceType === "stashbox") visibleBox += 1;
+                            else visibleInstalled += 1;
+                        }
+                    });
+
+                    if (headerBox) headerBox.style.display = visibleBox > 0 ? "block" : "none";
+                    if (headerInstalled) headerInstalled.style.display = visibleInstalled > 0 ? "block" : "none";
+                    if (sep) sep.style.display = (visibleBox > 0 && visibleInstalled > 0) ? "block" : "none";
+                    if (emptyMsg) emptyMsg.style.display = (visibleBox + visibleInstalled) === 0 ? "block" : "none";
+                });
+
+                searchInput.addEventListener("keydown", (e) => {
+                    e.stopPropagation();
+                    if (e.key === "Escape") {
+                        e.preventDefault();
+                        menu.remove();
+                    }
+                });
+
+                setTimeout(() => searchInput.focus(), 30);
+            }
+
+            const closeOnOutside = (e) => {
+                if (!menu.contains(e.target) && e.target !== triggerBtn && !triggerBtn.contains(e.target)) {
+                    menu.remove();
+                    root.document.removeEventListener("mousedown", closeOnOutside);
+                }
+            };
+            setTimeout(() => root.document.addEventListener("mousedown", closeOnOutside), 0);
+
+            items.forEach(item => {
                 item.addEventListener("mouseenter", () => {
                     item.style.background = isDark ? "rgba(99, 102, 241, 0.35)" : "rgba(99, 102, 241, 0.2)";
                 });
@@ -349,22 +411,16 @@
                     item.style.background = isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent";
                 });
                 item.addEventListener("click", (e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     const sourceId = item.dataset.sourceId;
                     menu.remove();
+                    root.document.removeEventListener("mousedown", closeOnOutside);
                     if (typeof onSourceChange === "function") {
                         onSourceChange(sourceId);
                     }
                 });
             });
-
-            const closeOnOutside = (e) => {
-                if (!menu.contains(e.target) && e.target !== triggerBtn) {
-                    menu.remove();
-                    root.document.removeEventListener("click", closeOnOutside);
-                }
-            };
-            setTimeout(() => root.document.addEventListener("click", closeOnOutside), 0);
         });
     }
 
@@ -849,7 +905,7 @@
             }
             const newRequestId = beginRequest(popup, sceneId);
             if (newRequestId == null) return;
-            showLoadingState(targetContainer, isDetached);
+            showLoadingState(popup);
             try {
                 const newResults = await (dependencies.fetchScraperMatchesForScene || fetchScraperMatchesForScene)(
                     sceneId,
@@ -927,7 +983,8 @@
                         sceneId,
                         null,
                         query,
-                        () => isRequestCurrent(popup, sceneId, manualRequestId)
+                        () => isRequestCurrent(popup, sceneId, manualRequestId),
+                        dependencies?.getActiveScraperSource?.() || activeSource?.id
                     );
                     if (!isRequestCurrent(popup, sceneId, manualRequestId)) return;
                     if (!manualResults?.length) {
@@ -1470,7 +1527,8 @@
                         sceneId,
                         null,
                         query,
-                        () => isRequestCurrent(popup, sceneId, manualRequestId)
+                        () => isRequestCurrent(popup, sceneId, manualRequestId),
+                        dependencies?.getActiveScraperSource?.() || activeSource?.id
                     );
                     if (!isRequestCurrent(popup, sceneId, manualRequestId)) return;
                     if (!manualResults?.length) {
