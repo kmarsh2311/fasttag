@@ -168,6 +168,8 @@ assert.equal(controller.showAutoScrapeOffState(idlePopup), true);
 const idleHud = controller.getHudElement();
 assert.ok(idleHud && connectedHudElements.has(idleHud), 'auto-scrape off state should create the idle HUD');
 assert.match(idleHud.innerHTML, /fasttag-auto-scraping-off\.webp/);
+assert.match(idleHud.innerHTML, /id="fasttag-scrape-idle-source-btn"/, 'idle card must have a scraper source selector button');
+assert.match(idleHud.innerHTML, /id="fasttag-scrape-idle-now-btn"/, 'idle card must have a scrape now button');
 assert.equal(idlePopup._fastTagScraperIdle, true);
 const initialHtml = idleHud.innerHTML;
 
@@ -182,6 +184,7 @@ global.document.createElement = prevCreateElement;
 // Verify source dropdown controller contract
 assert.match(source, /id="fasttag-scrape-source-btn"/, "results header must contain source selector button");
 assert.match(source, /id="fasttag-scrape-empty-source-btn"/, "empty state header must contain source selector button");
+assert.match(source, /id="fasttag-scrape-idle-source-btn"/, "idle card header must contain source selector button");
 assert.match(source, /fasttag-source-dropdown-menu/, "controller must define source dropdown menu");
 assert.match(source, /id="fasttag-source-search-input"/, "source dropdown must include search filter input");
 assert.match(source, /Stash-box Endpoints/, "dropdown menu must categorize Stash-box Endpoints");

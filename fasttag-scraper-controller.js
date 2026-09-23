@@ -574,6 +574,37 @@
         return true;
     }
 
+    function refreshIdleSourceBtn(container) {
+        if (!container || !dependencies) return;
+        const idleSourceBtn = container.querySelector?.('#fasttag-scrape-idle-source-btn');
+        if (!idleSourceBtn) return;
+        const nameSpan = idleSourceBtn.querySelector?.('.fasttag-idle-source-name');
+        const badgeSpan = idleSourceBtn.querySelector?.('.fasttag-idle-source-badge');
+
+        const updateUI = (source) => {
+            if (!source) return;
+            const name = source.shortName || source.name || 'StashDB';
+            const isUrlOnly = Boolean(source.isUrlOnly);
+            const icon = isUrlOnly ? '🔗' : '⚡';
+            if (nameSpan) {
+                nameSpan.textContent = `${icon} ${name}`;
+            }
+            if (badgeSpan) {
+                badgeSpan.innerHTML = isUrlOnly ? '<span style="font-size: 8px; color: #38bdf8; font-weight: 800; margin-left: 2px;">[URL]</span>' : '';
+            }
+            idleSourceBtn.title = `Active Scraper: ${name}${isUrlOnly ? ' (URL-only)' : ''} (Click to switch)`;
+        };
+
+        if (typeof dependencies.loadScraperSources === 'function') {
+            dependencies.loadScraperSources().then(sources => {
+                const active = typeof dependencies.resolveActiveSource === 'function'
+                    ? dependencies.resolveActiveSource(sources)
+                    : (sources?.all?.[0] || { id: 'stashbox_0', name: 'StashDB.org', shortName: 'StashDB' });
+                updateUI(active);
+            }).catch(() => {});
+        }
+    }
+
     function showAutoScrapeOffState(popup) {
         if (!isPopupActive(popup) || !dependencies) return false;
         invalidateRequests(popup);
@@ -608,6 +639,7 @@
                 popup.scrapeBtn.innerHTML = dependencies.isEasterEggActive?.() ? '<span>⚡ Scrape 🍫</span>' : '<span>⚡ Scrape</span>';
                 popup.scrapeBtn.title = 'Search this scene manually';
             }
+            refreshIdleSourceBtn(targetContainer);
             return true;
         }
         const isDark = dependencies.getEffectiveTheme?.() !== 'light';
@@ -617,9 +649,21 @@
         targetContainer.style.display = 'flex';
         targetContainer.style.flexDirection = 'column';
         targetContainer.innerHTML = `
-            <div data-fasttag-auto-scrape-off-header="true" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;min-height:38px;padding:8px 12px;border-bottom:1px solid ${border};background:${headerBg};color:${text};font-size:11.5px;font-weight:700;user-select:none;">
-                <span>Scraper ready — automatic search is off</span>
-                <button type="button" data-fasttag-idle-dock-toggle="true" style="padding:3px 7px;border:1px solid ${border};border-radius:4px;background:transparent;color:${text};cursor:pointer;font-size:10px;font-weight:700;">${detached ? 'Dock' : 'Pop out'}</button>
+            <div data-fasttag-auto-scrape-off-header="true" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;min-height:38px;padding:6px 10px;border-bottom:1px solid ${border};background:${headerBg};color:${text};font-size:11.5px;font-weight:700;user-select:none;">
+                <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+                    <span style="font-size:11px;font-weight:700;color:${isDark ? '#94a3b8' : '#64748b'};white-space:nowrap;">Scraper:</span>
+                    <button type="button" id="fasttag-scrape-idle-source-btn" class="fasttag-source-selector-btn" style="background:${isDark ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.12)'};border:1px solid ${isDark ? 'rgba(129, 140, 248, 0.5)' : '#818cf8'};border-radius:5px;color:${isDark ? '#e0e7ff' : '#312e81'};font-size:10.5px;font-weight:700;padding:2px 7px;cursor:pointer;display:inline-flex;align-items:center;gap:3px;max-width:145px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;" title="Choose scraper before scraping (Click to switch)">
+                        <span class="fasttag-idle-source-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:95px;">⚡ StashDB</span>
+                        <span class="fasttag-idle-source-badge"></span>
+                        <span style="font-size:8px;opacity:0.7;transform:translateY(0.5px);">▼</span>
+                    </button>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                    <button type="button" id="fasttag-scrape-idle-now-btn" style="padding:3px 8px;border:1px solid ${isDark ? 'rgba(99, 102, 241, 0.6)' : '#6366f1'};border-radius:4px;background:${isDark ? 'rgba(99, 102, 241, 0.35)' : '#4f46e5'};color:#ffffff;cursor:pointer;font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;gap:3px;transition:all 0.15s ease;" title="Scrape this scene now with selected scraper">
+                        <span>⚡ Scrape</span>
+                    </button>
+                    <button type="button" data-fasttag-idle-dock-toggle="true" style="padding:3px 7px;border:1px solid ${border};border-radius:4px;background:transparent;color:${text};cursor:pointer;font-size:10px;font-weight:700;">${detached ? 'Dock' : 'Pop out'}</button>
+                </div>
             </div>
             <div style="display:flex;flex:1;min-height:0;align-items:center;justify-content:center;overflow:hidden;background:#111827;">
                 <img src="/plugin/fasttag/assets/fasttag-auto-scraping-off.webp" alt="Auto-Scraping Off test card" style="display:block;width:100%;height:100%;object-fit:contain;">
@@ -643,6 +687,29 @@
             dependencies.setDetachScraper(!detached);
             showAutoScrapeOffState(popup);
         });
+        const idleSourceBtn = targetContainer.querySelector?.('#fasttag-scrape-idle-source-btn');
+        if (idleSourceBtn) {
+            attachSourceDropdown(idleSourceBtn, popup, popup.currentSceneId, async (newSourceId) => {
+                if (typeof dependencies?.setActiveScraperSource === 'function') {
+                    dependencies.setActiveScraperSource(newSourceId);
+                }
+                refreshIdleSourceBtn(targetContainer);
+            });
+        }
+        refreshIdleSourceBtn(targetContainer);
+
+        const idleScrapeNowBtn = targetContainer.querySelector?.('#fasttag-scrape-idle-now-btn');
+        if (idleScrapeNowBtn) {
+            idleScrapeNowBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (popup.triggerScrape) {
+                    popup.triggerScrape(true, popup.currentSceneId, popup.currentCardElement);
+                } else if (popup.scrapeBtn) {
+                    popup.scrapeBtn.click();
+                }
+            });
+        }
         if (detached) {
             const header = targetContainer.querySelector('[data-fasttag-auto-scrape-off-header]');
             attachHudDragging(targetContainer, header);
