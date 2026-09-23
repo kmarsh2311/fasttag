@@ -334,12 +334,20 @@
                 html += `<div class="fasttag-source-section-header" data-section="installed" style="padding: 4px 6px 2px 6px; font-size: 9px; font-weight: 800; color: ${isDark ? "#94a3b8" : "#64748b"}; letter-spacing: 0.5px; text-transform: uppercase;">Installed Scrapers</div>`;
                 sources.scrapers.forEach(scraper => {
                     const isSelected = activeSource.id === scraper.id || activeSource.scraperId === scraper.scraperId;
+                    const isUrlOnly = scraper.isUrlOnly === true;
+                    const icon = isUrlOnly ? "🔗" : "⚡";
+                    const badge = isUrlOnly
+                        ? `<span style="font-size: 8px; font-weight: 700; padding: 1.5px 5px; border-radius: 4px; background: ${isDark ? "rgba(56, 189, 248, 0.18)" : "rgba(14, 165, 233, 0.15)"}; color: ${isDark ? "#38bdf8" : "#0284c7"}; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0;">URL Only</span>`
+                        : "";
                     html += `
                         <div class="fasttag-source-menu-item" data-source-id="${escapeFn(scraper.id)}" data-source-name="${escapeFn(scraper.name).toLowerCase()}" data-source-type="installed" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
-                            <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                <span>⚡</span><span title="${escapeFn(scraper.name)}">${escapeFn(scraper.name)}</span>
+                            <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                                <span style="font-size: 11px;">${icon}</span><span title="${escapeFn(scraper.name)}">${escapeFn(scraper.name)}</span>
                             </span>
-                            ${isSelected ? '<span style="color:#6366f1; font-weight:800; font-size:12px;">✓</span>' : ''}
+                            <span style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                                ${badge}
+                                ${isSelected ? '<span style="color:#6366f1; font-weight:800; font-size:12px;">✓</span>' : ''}
+                            </span>
                         </div>
                     `;
                 });
@@ -937,19 +945,20 @@
                 <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; box-sizing: border-box; height: 100%; min-height: 150px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                         <div style="display: flex; align-items: center; gap: 6px;">
-                        <strong style="font-size: 12px; color: ${isDark ? '#e2e8f0' : '#1e293b'};">⚡ Scraper</strong>
-                        <button type="button" id="fasttag-scrape-empty-source-btn" class="fasttag-source-selector-btn" style="background: ${isDark ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.12)'}; border: 1px solid ${isDark ? 'rgba(129, 140, 248, 0.5)' : '#818cf8'}; border-radius: 5px; color: ${isDark ? '#e0e7ff' : '#312e81'}; font-size: 10.5px; font-weight: 700; padding: 1.5px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;" title="Active Scraper: ${escapeHtml(activeSource?.name || 'StashDB')} (Click to switch)">
-                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85px;">${escapeHtml(activeSource?.shortName || activeSource?.name || 'StashDB')}</span>
+                        <strong style="font-size: 12px; color: ${isDark ? '#e2e8f0' : '#1e293b'};">${activeSource?.isUrlOnly ? '🔗' : '⚡'} Scraper</strong>
+                        <button type="button" id="fasttag-scrape-empty-source-btn" class="fasttag-source-selector-btn" style="background: ${isDark ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.12)'}; border: 1px solid ${isDark ? 'rgba(129, 140, 248, 0.5)' : '#818cf8'}; border-radius: 5px; color: ${isDark ? '#e0e7ff' : '#312e81'}; font-size: 10.5px; font-weight: 700; padding: 1.5px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;" title="Active Scraper: ${escapeHtml(activeSource?.name || 'StashDB')} (Click to switch)">
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px;">${escapeHtml(activeSource?.shortName || activeSource?.name || 'StashDB')}</span>
+                            ${activeSource?.isUrlOnly ? '<span style="font-size: 8px; color: #38bdf8; font-weight: 800;">[URL]</span>' : ''}
                             <span style="font-size: 8px; opacity: 0.7; transform: translateY(0.5px);">▼</span>
                         </button>
                     </div>
                         <button type="button" id="fasttag-scrape-empty-close" style="border: none; background: transparent; color: ${isDark ? '#94a3b8' : '#64748b'}; font-size: 15px; cursor: pointer;">✕</button>
                     </div>
-                    <div style="padding: 8px; border-radius: 6px; background: ${isDark ? 'rgba(245,158,11,0.1)' : '#fffbeb'}; border: 1px solid ${isDark ? 'rgba(245,158,11,0.35)' : '#fcd34d'}; color: ${isDark ? '#fde68a' : '#92400e'}; font-size: 11px;">
-                        No automatic matches were found. Edit the search words below and try again.
+                    <div style="padding: 8px; border-radius: 6px; background: ${activeSource?.isUrlOnly ? (isDark ? 'rgba(56, 189, 248, 0.1)' : '#f0f9ff') : (isDark ? 'rgba(245,158,11,0.1)' : '#fffbeb')}; border: 1px solid ${activeSource?.isUrlOnly ? (isDark ? 'rgba(56, 189, 248, 0.35)' : '#7dd3fc') : (isDark ? 'rgba(245,158,11,0.35)' : '#fcd34d')}; color: ${activeSource?.isUrlOnly ? (isDark ? '#bae6fd' : '#0369a1') : (isDark ? '#fde68a' : '#92400e')}; font-size: 11px;">
+                        ${activeSource?.isUrlOnly ? '🔗 <strong>URL-only scraper:</strong> This studio scraper requires a direct video link. Paste the URL below to scrape it.' : 'No automatic matches were found. Edit the search words below and try again.'}
                     </div>
                     <div style="display: flex; align-items: center; gap: 6px;">
-                        <input id="fasttag-scrape-empty-query" type="text" value="${escapeHtml(initialQuery)}" placeholder="Enter title, studio or performer names" style="flex: 1; min-width: 0; height: 30px; box-sizing: border-box; padding: 4px 8px; border-radius: 6px; border: 1px solid ${isDark ? 'rgba(129,140,248,0.55)' : '#a5b4fc'}; background: ${isDark ? '#0f172a' : '#ffffff'}; color: ${isDark ? '#e2e8f0' : '#1e293b'}; font-size: 11px; outline: none;">
+                        <input id="fasttag-scrape-empty-query" type="text" value="${escapeHtml(initialQuery)}" placeholder="${activeSource?.isUrlOnly ? 'Paste video URL to scrape (https://...)' : 'Enter title, studio or performer names, or paste URL'}" style="flex: 1; min-width: 0; height: 30px; box-sizing: border-box; padding: 4px 8px; border-radius: 6px; border: 1px solid ${isDark ? 'rgba(129,140,248,0.55)' : '#a5b4fc'}; background: ${isDark ? '#0f172a' : '#ffffff'}; color: ${isDark ? '#e2e8f0' : '#1e293b'}; font-size: 11px; outline: none;">
                         <button id="fasttag-scrape-empty-search" type="button" style="height: 30px; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(129,140,248,0.6); background: rgba(99,102,241,0.22); color: ${isDark ? '#c7d2fe' : '#4338ca'}; font-size: 10.5px; font-weight: 700; cursor: pointer;">Search</button>
                     </div>
                 </div>

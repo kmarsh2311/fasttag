@@ -251,15 +251,15 @@
         const scrapers = (Array.isArray(installedScrapers) ? installedScrapers : [])
             .filter(scraper => {
                 if (!scraper || !scraper.id || scraper.id === "builtin_autotag") return false;
-                const supported = scraper.scene?.supported_scrapes;
-                if (Array.isArray(supported) && supported.length > 0 && !supported.includes("NAME")) {
-                    return false;
-                }
                 return true;
             })
             .map(scraper => {
                 const id = String(scraper.id).trim();
                 const rawName = String(scraper.name || "").trim() || id;
+                const supported = Array.isArray(scraper.scene?.supported_scrapes) ? scraper.scene.supported_scrapes : [];
+                const supportsName = supported.includes("NAME");
+                const supportsUrl = supported.includes("URL");
+                const isUrlOnly = Boolean(supportsUrl && !supportsName);
                 return {
                     id: "scraper:" + id,
                     type: "scraper",
@@ -268,10 +268,16 @@
                     name: rawName,
                     shortName: rawName.replace(/^community\//i, ""),
                     endpoint: null,
-                    isStashBox: false
+                    isStashBox: false,
+                    isUrlOnly
                 };
             })
-            .sort((a, b) => a.name.localeCompare(b.name));
+            .sort((a, b) => {
+                if (a.isUrlOnly !== b.isUrlOnly) {
+                    return a.isUrlOnly ? 1 : -1;
+                }
+                return a.name.localeCompare(b.name);
+            });
 
         return {
             stashBoxes: finalBoxes,

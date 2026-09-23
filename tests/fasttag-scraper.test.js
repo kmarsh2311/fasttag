@@ -107,14 +107,14 @@ assert.deepEqual(
             { id: "stashbox_1", type: "stash_box", index: 1, scraperId: null, name: "The PornDB", shortName: "The PornDB", endpoint: "https://theporndb.net/graphql", isStashBox: true }
         ],
         scrapers: [
-            { id: "scraper:community/BoyNapped", type: "scraper", index: null, scraperId: "community/BoyNapped", name: "BoyNapped", shortName: "BoyNapped", endpoint: null, isStashBox: false },
-            { id: "scraper:community/BradMontana", type: "scraper", index: null, scraperId: "community/BradMontana", name: "BradMontana", shortName: "BradMontana", endpoint: null, isStashBox: false }
+            { id: "scraper:community/BoyNapped", type: "scraper", index: null, scraperId: "community/BoyNapped", name: "BoyNapped", shortName: "BoyNapped", endpoint: null, isStashBox: false, isUrlOnly: false },
+            { id: "scraper:community/BradMontana", type: "scraper", index: null, scraperId: "community/BradMontana", name: "BradMontana", shortName: "BradMontana", endpoint: null, isStashBox: false, isUrlOnly: false }
         ],
         all: [
             { id: "stashbox_0", type: "stash_box", index: 0, scraperId: null, name: "StashDB", shortName: "StashDB", endpoint: "https://stashdb.org/graphql", isStashBox: true },
             { id: "stashbox_1", type: "stash_box", index: 1, scraperId: null, name: "The PornDB", shortName: "The PornDB", endpoint: "https://theporndb.net/graphql", isStashBox: true },
-            { id: "scraper:community/BoyNapped", type: "scraper", index: null, scraperId: "community/BoyNapped", name: "BoyNapped", shortName: "BoyNapped", endpoint: null, isStashBox: false },
-            { id: "scraper:community/BradMontana", type: "scraper", index: null, scraperId: "community/BradMontana", name: "BradMontana", shortName: "BradMontana", endpoint: null, isStashBox: false }
+            { id: "scraper:community/BoyNapped", type: "scraper", index: null, scraperId: "community/BoyNapped", name: "BoyNapped", shortName: "BoyNapped", endpoint: null, isStashBox: false, isUrlOnly: false },
+            { id: "scraper:community/BradMontana", type: "scraper", index: null, scraperId: "community/BradMontana", name: "BradMontana", shortName: "BradMontana", endpoint: null, isStashBox: false, isUrlOnly: false }
         ]
     },
     "listAvailableSources should categorize Stash-boxes at the top and installed scrapers below"
