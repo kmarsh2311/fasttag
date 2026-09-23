@@ -658,12 +658,7 @@
                         <span style="font-size:8px;opacity:0.7;transform:translateY(0.5px);">▼</span>
                     </button>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                    <button type="button" id="fasttag-scrape-idle-now-btn" style="padding:3px 8px;border:1px solid ${isDark ? 'rgba(99, 102, 241, 0.6)' : '#6366f1'};border-radius:4px;background:${isDark ? 'rgba(99, 102, 241, 0.35)' : '#4f46e5'};color:#ffffff;cursor:pointer;font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;gap:3px;transition:all 0.15s ease;" title="Scrape this scene now with selected scraper">
-                        <span>⚡ Scrape</span>
-                    </button>
-                    <button type="button" data-fasttag-idle-dock-toggle="true" style="padding:3px 7px;border:1px solid ${border};border-radius:4px;background:transparent;color:${text};cursor:pointer;font-size:10px;font-weight:700;">${detached ? 'Dock' : 'Pop out'}</button>
-                </div>
+                <button type="button" data-fasttag-idle-dock-toggle="true" style="padding:3px 7px;border:1px solid ${border};border-radius:4px;background:transparent;color:${text};cursor:pointer;font-size:10px;font-weight:700;flex-shrink:0;">${detached ? 'Dock' : 'Pop out'}</button>
             </div>
             <div style="display:flex;flex:1;min-height:0;align-items:center;justify-content:center;overflow:hidden;background:#111827;">
                 <img src="/plugin/fasttag/assets/fasttag-auto-scraping-off.webp" alt="Auto-Scraping Off test card" style="display:block;width:100%;height:100%;object-fit:contain;">
@@ -698,18 +693,7 @@
         }
         refreshIdleSourceBtn(targetContainer);
 
-        const idleScrapeNowBtn = targetContainer.querySelector?.('#fasttag-scrape-idle-now-btn');
-        if (idleScrapeNowBtn) {
-            idleScrapeNowBtn.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (popup.triggerScrape) {
-                    popup.triggerScrape(true, popup.currentSceneId, popup.currentCardElement);
-                } else if (popup.scrapeBtn) {
-                    popup.scrapeBtn.click();
-                }
-            });
-        }
+
         if (detached) {
             const header = targetContainer.querySelector('[data-fasttag-auto-scrape-off-header]');
             attachHudDragging(targetContainer, header);

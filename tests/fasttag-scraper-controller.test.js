@@ -169,7 +169,6 @@ const idleHud = controller.getHudElement();
 assert.ok(idleHud && connectedHudElements.has(idleHud), 'auto-scrape off state should create the idle HUD');
 assert.match(idleHud.innerHTML, /fasttag-auto-scraping-off\.webp/);
 assert.match(idleHud.innerHTML, /id="fasttag-scrape-idle-source-btn"/, 'idle card must have a scraper source selector button');
-assert.match(idleHud.innerHTML, /id="fasttag-scrape-idle-now-btn"/, 'idle card must have a scrape now button');
 assert.equal(idlePopup._fastTagScraperIdle, true);
 const initialHtml = idleHud.innerHTML;
 
