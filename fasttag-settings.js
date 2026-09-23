@@ -882,6 +882,57 @@
             });
         }
 
+        
+        // TAB 3: Default scraper source and Stash-box fallback wiring
+        const defaultSourceSelect = modal.querySelector("#fasttag-setting-default-scraper-source");
+        const fallbackCheckbox = modal.querySelector("#fasttag-setting-allow-stashbox-fallback");
+
+        if (defaultSourceSelect && typeof loadScraperSources === "function") {
+            loadScraperSources().then(sources => {
+                if (!sources) return;
+                const currentDefault = typeof getDefaultScraperSource === "function" ? getDefaultScraperSource() : "stashbox_default";
+                let html = "<option value=\"stashbox_default\">Default Stash-box (StashDB.org)</option>";
+                html += "<option value=\"remember_last\"" + (currentDefault === "remember_last" ? " selected" : "") + ">Remember Last Used</option>";
+
+                if (sources.stashBoxes && sources.stashBoxes.length > 0) {
+                    html += "<optgroup label=\"Stash-box Endpoints\">";
+                    sources.stashBoxes.forEach(box => {
+                        const selected = currentDefault === box.id ? " selected" : "";
+                        html += "<option value=\"" + box.id + "\"" + selected + ">🌐 " + box.name + "</option>";
+                    });
+                    html += "</optgroup>";
+                }
+
+                if (sources.scrapers && sources.scrapers.length > 0) {
+                    html += "<optgroup label=\"Installed Scrapers\">";
+                    sources.scrapers.forEach(scraper => {
+                        const selected = currentDefault === scraper.id ? " selected" : "";
+                        html += "<option value=\"" + scraper.id + "\"" + selected + ">⚡ " + scraper.name + "</option>";
+                    });
+                    html += "</optgroup>";
+                }
+                defaultSourceSelect.innerHTML = html;
+                defaultSourceSelect.value = currentDefault;
+            }).catch((e) => console.log("[FastTag] Error loading sources for settings:", e));
+
+            defaultSourceSelect.addEventListener("change", (e) => {
+                if (typeof setDefaultScraperSource === "function") {
+                    setDefaultScraperSource(e.target.value);
+                    const selectedText = e.target.options[e.target.selectedIndex]?.text || e.target.value;
+                    showToast("Default scraper set to: " + selectedText, "info");
+                }
+            });
+        }
+
+        if (fallbackCheckbox) {
+            fallbackCheckbox.addEventListener("change", (e) => {
+                if (typeof setAllowStashBoxFallback === "function") {
+                    setAllowStashBoxFallback(e.target.checked);
+                    showToast("Stash-box fallback " + (e.target.checked ? "enabled" : "disabled"), "info");
+                }
+            });
+        }
+
         const closeModal = () => {
             try {
                 saveSpeedsFromInputs();
