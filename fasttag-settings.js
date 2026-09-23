@@ -21,6 +21,11 @@
             getOrganizedWord,
             getAutoMarkOrganized,
             getFillMissingPerformerImages,
+            getDefaultScraperSource,
+            setDefaultScraperSource,
+            getAllowStashBoxFallback,
+            setAllowStashBoxFallback,
+            loadScraperSources,
             getGeminiApiKey,
             getGeminiModel,
             getGeminiAutoParse,
@@ -261,6 +266,27 @@
 
                     <!-- TAB 3: WORKFLOW -->
                     <div id="fasttag-tab-pane-scraper" class="fasttag-tab-pane" style="display: none; flex-direction: column; gap: 14px;">
+                        <!-- Default Scraper Source setting -->
+                        <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 8px; background: ${cardBg}; border: 1px solid ${border};">
+                            <label for="fasttag-setting-default-scraper-source" style="font-weight: 600; font-size: 13px; color: ${text};">Default Scraper Source</label>
+                            <div style="font-size: 11px; color: ${textMuted};">Select which scraper FastTag queries first when opening a scene.</div>
+                            <select id="fasttag-setting-default-scraper-source" style="margin-top: 4px; padding: 6px 8px; border-radius: 6px; border: 1px solid ${border}; background: ${bg}; color: ${text}; font-size: 11.5px; outline: none; cursor: pointer;">
+                                <option value="stashbox_default">Default Stash-box (StashDB.org)</option>
+                                <option value="remember_last">Remember Last Used</option>
+                            </select>
+                        </div>
+
+                        <!-- Fallback to alternate Stash-box endpoints -->
+                        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px; border-radius: 8px; background: ${cardBg}; border: 1px solid ${border};">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 13px;">Fallback to alternate Stash-box endpoints</div>
+                                <div style="font-size: 11px; color: ${textMuted}; margin-top: 2px;">If the default Stash-box returns no match, automatically check your other configured Stash-box instances (e.g. The PornDB). Installed community scrapers are never queried automatically.</div>
+                            </div>
+                            <input type="checkbox" id="fasttag-setting-allow-stashbox-fallback" ${getAllowStashBoxFallback?.() ? "checked" : ""} style="cursor: pointer; width: 18px; height: 18px; accent-color: #6366f1; margin-top: 2px;">
+                        </div>
+
+                        <div style="height: 1px; background: ${border};"></div>
+
                         <!-- Auto-Mark Scene as Organized / Organised -->
                         <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
                             <div style="flex: 1;">

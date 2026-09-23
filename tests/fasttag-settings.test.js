@@ -117,4 +117,7 @@ root.FastTag.settings.open({
 assert.equal(appended.length, 1, 'opening settings should append one modal');
 assert.equal(appended[0].id, 'fasttag-settings-modal');
 
+assert.match(source, /fasttag-setting-default-scraper-source/, "settings should provide a default scraper source selector");
+assert.match(source, /fasttag-setting-allow-stashbox-fallback/, "settings should provide a Stash-box fallback checkbox");
+
 console.log('fasttag-settings tests passed');

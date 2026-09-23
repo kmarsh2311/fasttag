@@ -15,6 +15,8 @@ const scraperControllerSource = fs.readFileSync(path.join(pluginDirectory, 'fast
 const popupSource = fs.readFileSync(path.join(pluginDirectory, 'fasttag-popup.js'), 'utf8');
 const libraryManagerSource = fs.readFileSync(path.join(pluginDirectory, 'fasttag-library-manager.js'), 'utf8');
 const uiSource = fs.readFileSync(path.join(pluginDirectory, 'fasttag-ui.js'), 'utf8');
+const scraperSource = fs.readFileSync(path.join(pluginDirectory, 'fasttag-scraper.js'), 'utf8');
+const storageSource = fs.readFileSync(path.join(pluginDirectory, 'fasttag-storage.js'), 'utf8');
 const runnerSource = fs.readFileSync(path.join(__dirname, 'run-all.js'), 'utf8');
 const expectedOrder = [
     'tabulator.min.js',
@@ -255,5 +257,13 @@ assert.ok((mainSource.match(/classList\.toggle\('fasttag-btn-finished-pulse', is
 assert.ok(mainSource.includes('@media (prefers-reduced-motion: reduce)'), 'the final-action pulse should respect reduced-motion preferences');
 const everythingSequentialButtonBlock = mainSource.slice(mainSource.indexOf('} else if (sequentialEditState.enabled) {', mainSource.indexOf('const updateSaveButton = () =>')), mainSource.indexOf('} else {', mainSource.indexOf('} else if (sequentialEditState.enabled) {', mainSource.indexOf('const updateSaveButton = () =>'))));
 assert.ok(everythingSequentialButtonBlock.includes("popup.cancelBtn.style.display = isLast ? 'none' : 'block';"), 'Edit Everything must apply final-scene hiding inside its Sequential branch');
+
+
+assert.ok(scraperSource.includes("function listAvailableSources("), "scraper engine must provide listAvailableSources");
+assert.ok(scraperSource.includes("function resolveActiveSource("), "scraper engine must provide resolveActiveSource");
+assert.ok(storageSource.includes("getDefaultScraperSource"), "storage must provide getDefaultScraperSource");
+assert.ok(storageSource.includes("setActiveScraperSource"), "storage must provide setActiveScraperSource");
+assert.ok(storageSource.includes("getAllowStashBoxFallback"), "storage must provide getAllowStashBoxFallback");
+assert.ok(scraperControllerSource.includes("attachSourceDropdown("), "scraper controller must attach source dropdown");
 
 console.log('fasttag-module-contract tests passed');

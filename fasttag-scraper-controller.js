@@ -268,6 +268,105 @@
     function isHudOpen() { return Boolean(floatingHudElement && root.document?.body?.contains(floatingHudElement)); }
     function resetLayoutState() { floatingHudPosition = null; floatingHudSize = null; }
 
+    
+    function attachSourceDropdown(triggerBtn, popup, sceneId, onSourceChange) {
+        if (!triggerBtn) return;
+        triggerBtn.addEventListener("click", async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const existingMenu = root.document.getElementById("fasttag-source-dropdown-menu");
+            if (existingMenu) {
+                existingMenu.remove();
+                return;
+            }
+
+            const isDark = dependencies.getEffectiveTheme() === "dark";
+            const sources = typeof dependencies.loadScraperSources === "function"
+                ? await dependencies.loadScraperSources()
+                : { stashBoxes: [], scrapers: [], all: [] };
+            const activeSource = typeof dependencies.resolveActiveSource === "function"
+                ? dependencies.resolveActiveSource(sources)
+                : (sources.all?.[0] || { id: "stashbox_0", name: "StashDB.org" });
+
+            const menu = root.document.createElement("div");
+            menu.id = "fasttag-source-dropdown-menu";
+            menu.style.cssText = "position: fixed; z-index: 10000002; background: " + (isDark ? "#0f172a" : "#ffffff") + "; border: 1px solid " + (isDark ? "rgba(129, 140, 248, 0.45)" : "#a5b4fc") + "; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 5px; min-width: 190px; max-width: 260px; max-height: 280px; overflow-y: auto; font-family: system-ui, -apple-system, sans-serif; font-size: 11px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;";
+
+            const rect = triggerBtn.getBoundingClientRect();
+            let top = rect.bottom + 4;
+            let left = rect.left;
+            if (top + 280 > root.innerHeight) top = Math.max(8, rect.top - 285);
+            if (left + 220 > root.innerWidth) left = Math.max(8, root.innerWidth - 230);
+            menu.style.top = top + "px";
+            menu.style.left = left + "px";
+
+            let html = "";
+            if (sources.stashBoxes && sources.stashBoxes.length > 0) {
+                html += "<div style=\"padding: 4px 6px 2px 6px; font-size: 9px; font-weight: 800; color: " + (isDark ? "#818cf8" : "#4f46e5") + "; letter-spacing: 0.5px; text-transform: uppercase;\">Stash-box Endpoints</div>";
+                sources.stashBoxes.forEach(box => {
+                    const isSelected = activeSource.id === box.id || activeSource.index === box.index;
+                    html += `
+                        <div class="fasttag-source-menu-item" data-source-id="${box.id}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
+                            <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <span>🌐</span><span title="${dependencies.escapeHtml(box.name)}">${dependencies.escapeHtml(box.name)}</span>
+                            </span>
+                            ${isSelected ? '<span style="color:#6366f1; font-weight:800; font-size:12px;">✓</span>' : ''}
+                        </div>
+                    `;
+                });
+            }
+
+            if (sources.scrapers && sources.scrapers.length > 0) {
+                if (sources.stashBoxes && sources.stashBoxes.length > 0) {
+                    html += "<div style=\"height: 1px; background: " + (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)") + "; margin: 3px 0;\"></div>";
+                }
+                html += "<div style=\"padding: 4px 6px 2px 6px; font-size: 9px; font-weight: 800; color: " + (isDark ? "#94a3b8" : "#64748b") + "; letter-spacing: 0.5px; text-transform: uppercase;\">Installed Scrapers</div>";
+                sources.scrapers.forEach(scraper => {
+                    const isSelected = activeSource.id === scraper.id || activeSource.scraperId === scraper.scraperId;
+                    html += `
+                        <div class="fasttag-source-menu-item" data-source-id="${scraper.id}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"}; transition: background 0.1s ease;">
+                            <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <span>⚡</span><span title="${dependencies.escapeHtml(scraper.name)}">${dependencies.escapeHtml(scraper.name)}</span>
+                            </span>
+                            ${isSelected ? '<span style="color:#6366f1; font-weight:800; font-size:12px;">✓</span>' : ''}
+                        </div>
+                    `;
+                });
+            }
+
+            menu.innerHTML = html;
+            root.document.body.appendChild(menu);
+
+            menu.querySelectorAll(".fasttag-source-menu-item").forEach(item => {
+                item.addEventListener("mouseenter", () => {
+                    item.style.background = isDark ? "rgba(99, 102, 241, 0.35)" : "rgba(99, 102, 241, 0.2)";
+                });
+                item.addEventListener("mouseleave", () => {
+                    const id = item.dataset.sourceId;
+                    const isSelected = activeSource.id === id || activeSource.scraperId === id;
+                    item.style.background = isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent";
+                });
+                item.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const sourceId = item.dataset.sourceId;
+                    menu.remove();
+                    if (typeof onSourceChange === "function") {
+                        onSourceChange(sourceId);
+                    }
+                });
+            });
+
+            const closeOnOutside = (e) => {
+                if (!menu.contains(e.target) && e.target !== triggerBtn) {
+                    menu.remove();
+                    root.document.removeEventListener("click", closeOnOutside);
+                }
+            };
+            setTimeout(() => root.document.addEventListener("click", closeOnOutside), 0);
+        });
+    }
+
     function ensureHud(popup) {
         const document = root.document;
         let hudElement = getHudElement();
@@ -736,13 +835,25 @@
 
         let currentIndex = 0;
         const isDark = getEffectiveTheme() === 'dark';
+        const availableSources = typeof dependencies.loadScraperSources === 'function'
+            ? await dependencies.loadScraperSources()
+            : { stashBoxes: [], scrapers: [], all: [] };
+        const activeSource = typeof dependencies.resolveActiveSource === 'function'
+            ? dependencies.resolveActiveSource(availableSources)
+            : { id: 'stashbox_0', name: 'StashDB.org', shortName: 'StashDB' };
 
         if (!hasResults) {
             const initialQuery = cleanTitleForScraping(emptySearchQuery || '');
             targetContainer.innerHTML = `
                 <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; box-sizing: border-box; height: 100%; min-height: 150px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                        <strong style="font-size: 12px; color: ${isDark ? '#e2e8f0' : '#1e293b'};">⚡ Scraper Search</strong>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                        <strong style="font-size: 12px; color: ${isDark ? '#e2e8f0' : '#1e293b'};">⚡ Scraper</strong>
+                        <button type="button" id="fasttag-scrape-empty-source-btn" class="fasttag-source-selector-btn" style="background: ${isDark ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.12)'}; border: 1px solid ${isDark ? 'rgba(129, 140, 248, 0.5)' : '#818cf8'}; border-radius: 5px; color: ${isDark ? '#e0e7ff' : '#312e81'}; font-size: 10.5px; font-weight: 700; padding: 1.5px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;" title="Active Scraper: ${escapeHtml(activeSource?.name || 'StashDB')} (Click to switch)">
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85px;">${escapeHtml(activeSource?.shortName || activeSource?.name || 'StashDB')}</span>
+                            <span style="font-size: 8px; opacity: 0.7; transform: translateY(0.5px);">▼</span>
+                        </button>
+                    </div>
                         <button type="button" id="fasttag-scrape-empty-close" style="border: none; background: transparent; color: ${isDark ? '#94a3b8' : '#64748b'}; font-size: 15px; cursor: pointer;">✕</button>
                     </div>
                     <div style="padding: 8px; border-radius: 6px; background: ${isDark ? 'rgba(245,158,11,0.1)' : '#fffbeb'}; border: 1px solid ${isDark ? 'rgba(245,158,11,0.35)' : '#fcd34d'}; color: ${isDark ? '#fde68a' : '#92400e'}; font-size: 11px;">
@@ -824,6 +935,8 @@
                 if (isDetached) popup.scrapeBtn.classList.add('fasttag-dock-pulse');
             }
             if (isDetached && floatingScraperHudElement) attachResizeHandles(floatingScraperHudElement);
+            const emptySourceBtn = targetContainer.querySelector("#fasttag-scrape-empty-source-btn");
+            if (emptySourceBtn) attachSourceDropdown(emptySourceBtn, popup, sceneId, handleSourceChange);
             setTimeout(() => emptySearchInput?.focus({ preventScroll: true }), 0);
             return;
         }
@@ -978,7 +1091,10 @@
                     <div id="fasttag-scrape-header" style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 4px 6px; flex-wrap: nowrap; user-select: none; white-space: nowrap; overflow: visible; min-height: 26px; padding: 1px 0;">
                         <div id="fasttag-scrape-header-primary" style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: ${isDark ? '#e0e7ff' : '#312e81'}; min-width: 0; flex: 1 1 150px; overflow: hidden;">
                             <span style="font-size: 13px; line-height: 1; flex-shrink: 0;">⚡</span>
-                            <span id="fasttag-scrape-source-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; max-width: 72px;" title="${escapeHtml(scraperSourceName)}">${escapeHtml(scraperSourceLabel)}</span>
+                            <button type="button" id="fasttag-scrape-source-btn" class="fasttag-source-selector-btn" style="background: ${isDark ? 'rgba(99, 102, 241, 0.22)' : 'rgba(99, 102, 241, 0.12)'}; border: 1px solid ${isDark ? 'rgba(129, 140, 248, 0.5)' : '#818cf8'}; border-radius: 5px; color: ${isDark ? '#e0e7ff' : '#312e81'}; font-size: 11px; font-weight: 700; padding: 1.5px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; transition: all 0.15s ease;" title="Active Scraper: ${escapeHtml(activeSource?.name || scraperSourceName)} (Click to switch)">
+                                <span id="fasttag-scrape-source-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 95px;" title="${escapeHtml(scraperSourceName)}">${escapeHtml(scraperSourceLabel)}</span>
+                                <span style="font-size: 8px; opacity: 0.7; transform: translateY(0.5px);">▼</span>
+                            </button>
                             ${results.length > 1 ? `
                                 <div id="fasttag-scrape-match-counter" class="fasttag-match-counter-pulse" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: 92px; box-sizing: border-box; font-size: 11px; font-weight: 700; color: ${isDark ? '#e0e7ff' : '#312e81'}; background: ${isDark ? 'rgba(99, 102, 241, 0.25)' : 'rgba(99, 102, 241, 0.12)'}; border: 1px solid ${isDark ? 'rgba(129, 140, 248, 0.75)' : '#818cf8'}; padding: 2px 5px; border-radius: 5px; margin-left: 2px; user-select: none; flex: 0 0 92px; white-space: nowrap; line-height: 1;">
                                     <button type="button" id="fasttag-scrape-prev" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(148,163,184,0.4); border-radius: 3px; cursor: pointer; color: inherit; padding: 1px 5px; font-size: 9.5px; line-height: 1; transition: all 0.15s ease;" ${currentIndex === 0 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''} title="Previous match (Left Arrow)">◀</button>

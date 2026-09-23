@@ -24,7 +24,10 @@
         hideObviousFalsePositives: 'fasttag_hide_obvious_false_positives_v1',
         scraperMatching: 'fasttag_scraper_matching_settings_v1',
         fillMissingPerformerImages: 'fasttag_fill_missing_performer_images_v1',
-        scraperHudOpen: 'fasttag_scraper_hud_open_state'
+        scraperHudOpen: 'fasttag_scraper_hud_open_state',
+        defaultScraperSource: 'fasttag_default_scraper_source_v1',
+        activeScraperSource: 'fasttag_active_scraper_source_v1',
+        allowStashBoxFallback: 'fasttag_allow_stashbox_fallback_v1'
     });
     const RECENT_KEYS = Object.freeze({
         tags: 'stash_fast_tag_recent_tags',
@@ -42,9 +45,9 @@
     });
     const MAX_SCRUB_CUE_DISPLAYS = 5;
     const SCRAPER_MATCHING_PRESETS = Object.freeze({
-        conservative: Object.freeze({ preset: 'conservative', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: false, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.1, durationMismatchThreshold: 600, durationMismatchPercent: 35, initialResultLimit: 40 }),
-        balanced: Object.freeze({ preset: 'balanced', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: true, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.2, durationMismatchThreshold: 300, durationMismatchPercent: 25, initialResultLimit: 25 }),
-        strict: Object.freeze({ preset: 'strict', hideObviousFalsePositives: true, singleWordAliasMode: 'ignore', majorCastConflict: true, requireStudioMismatch: false, closeDurationProtects: false, titleSimilarityThreshold: 0.35, durationMismatchThreshold: 120, durationMismatchPercent: 15, initialResultLimit: 15 })
+        conservative: Object.freeze({ preset: 'conservative', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: false, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.1, durationMismatchThreshold: 600, durationMismatchPercent: 35, initialResultLimit: 40, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default' }),
+        balanced: Object.freeze({ preset: 'balanced', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: true, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.2, durationMismatchThreshold: 300, durationMismatchPercent: 25, initialResultLimit: 25, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default' }),
+        strict: Object.freeze({ preset: 'strict', hideObviousFalsePositives: true, singleWordAliasMode: 'ignore', majorCastConflict: true, requireStudioMismatch: false, closeDurationProtects: false, titleSimilarityThreshold: 0.35, durationMismatchThreshold: 120, durationMismatchPercent: 15, initialResultLimit: 15, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default' })
     });
     const DEFAULT_SCRAPER_MATCHING_SETTINGS = SCRAPER_MATCHING_PRESETS.balanced;
     const IDB_NAME = 'stash_fasttag_cache_db';
@@ -190,7 +193,9 @@
             titleSimilarityThreshold: numberInRange(merged.titleSimilarityThreshold, 0.2, 0, 1),
             durationMismatchThreshold: Math.round(numberInRange(merged.durationMismatchThreshold, 300, 0, 3600)),
             durationMismatchPercent: Math.round(numberInRange(merged.durationMismatchPercent, 25, 0, 100)),
-            initialResultLimit: Math.round(numberInRange(merged.initialResultLimit, 25, 5, 100))
+            initialResultLimit: Math.round(numberInRange(merged.initialResultLimit, 25, 5, 100)),
+            allowStashBoxFallback: merged.allowStashBoxFallback === true,
+            defaultScraperSource: typeof merged.defaultScraperSource === 'string' ? merged.defaultScraperSource : 'stashbox_default'
         };
     }
     function getScraperMatchingSettings() {
@@ -222,6 +227,53 @@
     }
     function resetScraperMatchingSettings() {
         return setScraperMatchingPreset('balanced');
+    }
+
+    
+    function getDefaultScraperSource() {
+        try {
+            const fromSettings = getScraperMatchingSettings().defaultScraperSource;
+            if (fromSettings) return fromSettings;
+            return root.localStorage.getItem(KEYS.defaultScraperSource) || 'stashbox_default';
+        } catch (e) {
+            return 'stashbox_default';
+        }
+    }
+    function setDefaultScraperSource(sourceId) {
+        try {
+            const val = String(sourceId || 'stashbox_default');
+            root.localStorage.setItem(KEYS.defaultScraperSource, val);
+            setScraperMatchingSettings({ defaultScraperSource: val, preset: 'custom' });
+            return val;
+        } catch (e) {
+            return 'stashbox_default';
+        }
+    }
+    function getActiveScraperSource() {
+        try {
+            return root.localStorage.getItem(KEYS.activeScraperSource) || null;
+        } catch (e) {
+            return null;
+        }
+    }
+    function setActiveScraperSource(sourceId) {
+        try {
+            if (!sourceId) {
+                root.localStorage.removeItem(KEYS.activeScraperSource);
+                return null;
+            }
+            const val = String(sourceId);
+            root.localStorage.setItem(KEYS.activeScraperSource, val);
+            return val;
+        } catch (e) {
+            return null;
+        }
+    }
+    function getAllowStashBoxFallback() {
+        return getScraperMatchingSettings().allowStashBoxFallback === true;
+    }
+    function setAllowStashBoxFallback(enabled) {
+        setScraperMatchingSettings({ allowStashBoxFallback: Boolean(enabled), preset: 'custom' });
     }
 
     function getIDB() {
@@ -388,6 +440,12 @@
         setScraperMatchingSettings,
         setScraperMatchingPreset,
         resetScraperMatchingSettings,
+        getDefaultScraperSource,
+        setDefaultScraperSource,
+        getActiveScraperSource,
+        setActiveScraperSource,
+        getAllowStashBoxFallback,
+        setAllowStashBoxFallback,
         idbGet,
         idbSet,
         idbDelete,

@@ -1,6 +1,9 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const source = fs.readFileSync(path.resolve(__dirname, "..", "fasttag-scraper-controller.js"), "utf8");
 
 global.FastTag = global.FastTag || {};
 require('../fasttag-scraper-controller.js');
@@ -175,6 +178,13 @@ assert.equal(animateCalls, 0, 'sequential navigation must not trigger a flash en
 controller.closeHud();
 global.document.createElement = prevCreateElement;
 
+
+// Verify source dropdown controller contract
+assert.match(source, /id="fasttag-scrape-source-btn"/, "results header must contain source selector button");
+assert.match(source, /id="fasttag-scrape-empty-source-btn"/, "empty state header must contain source selector button");
+assert.match(source, /fasttag-source-dropdown-menu/, "controller must define source dropdown menu");
+assert.match(source, /Stash-box Endpoints/, "dropdown menu must categorize Stash-box Endpoints");
+assert.match(source, /Installed Scrapers/, "dropdown menu must categorize Installed Scrapers");
 
 async function testTriggerRejectsLateResults() {
     let resolveFetch;

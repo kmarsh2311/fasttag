@@ -88,6 +88,38 @@ assert.equal(
     'boycrush benjamin riley jason valencia',
     'the editable search should include the studio and every linked performer'
 );
+
+assert.deepEqual(
+    scraper.listAvailableSources(
+        [
+            { name: "StashDB", endpoint: "https://stashdb.org/graphql" },
+            { name: "The PornDB", endpoint: "https://theporndb.net/graphql" }
+        ],
+        [
+            { id: "builtin_autotag", name: "Ignored" },
+            { id: "community/BoyNapped", name: "BoyNapped" },
+            { id: "community/BradMontana", name: "BradMontana" }
+        ]
+    ),
+    {
+        stashBoxes: [
+            { id: "stashbox_0", type: "stash_box", index: 0, scraperId: null, name: "StashDB", shortName: "StashDB", endpoint: "https://stashdb.org/graphql", isStashBox: true },
+            { id: "stashbox_1", type: "stash_box", index: 1, scraperId: null, name: "The PornDB", shortName: "The PornDB", endpoint: "https://theporndb.net/graphql", isStashBox: true }
+        ],
+        scrapers: [
+            { id: "scraper:community/BoyNapped", type: "scraper", index: null, scraperId: "community/BoyNapped", name: "BoyNapped", shortName: "BoyNapped", endpoint: null, isStashBox: false },
+            { id: "scraper:community/BradMontana", type: "scraper", index: null, scraperId: "community/BradMontana", name: "BradMontana", shortName: "BradMontana", endpoint: null, isStashBox: false }
+        ],
+        all: [
+            { id: "stashbox_0", type: "stash_box", index: 0, scraperId: null, name: "StashDB", shortName: "StashDB", endpoint: "https://stashdb.org/graphql", isStashBox: true },
+            { id: "stashbox_1", type: "stash_box", index: 1, scraperId: null, name: "The PornDB", shortName: "The PornDB", endpoint: "https://theporndb.net/graphql", isStashBox: true },
+            { id: "scraper:community/BoyNapped", type: "scraper", index: null, scraperId: "community/BoyNapped", name: "BoyNapped", shortName: "BoyNapped", endpoint: null, isStashBox: false },
+            { id: "scraper:community/BradMontana", type: "scraper", index: null, scraperId: "community/BradMontana", name: "BradMontana", shortName: "BradMontana", endpoint: null, isStashBox: false }
+        ]
+    },
+    "listAvailableSources should categorize Stash-boxes at the top and installed scrapers below"
+);
+
 assert.deepEqual(
     scraper.resolvePreferredStashBox([
         { name: 'FansDB', endpoint: 'https://fansdb.cc/graphql' },
@@ -457,7 +489,7 @@ async function testHashMatch() {
         }
     });
     const results = await scraper.fetchScraperMatchesForScene(7, null);
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4, 'loads sources (stashboxes + scrapers), scene context, and scene scrape');
     const sceneIdScrapeCall = calls.find(call => call.variables?.input?.scene_id === '7');
     assert.deepEqual(sceneIdScrapeCall.variables, { source: { stash_box_index: 1 }, input: { scene_id: '7' } });
     assert.equal(results[0]._matchType, 'scene-id');
@@ -471,34 +503,77 @@ async function testHashMatch() {
     });
 }
 
-async function testTitleThenInstalledScraperFallback() {
+
+async function testSingleSourceNoAutoLoopAndTargetedScraping() {
     const calls = [];
     scraper.configure({
         cleanTitleForScraping,
         parseDurationSec,
         fetchGQL: async (query, variables) => {
             calls.push({ query, variables });
-            if (query.includes('findScene')) {
-                return { data: { findScene: { title: 'A Scene', files: [{ path: 'Folder/A_File.mp4' }] } } };
+            if (query.includes("findScene")) {
+                return { data: { findScene: { title: "A Scene", files: [{ path: "Folder/A_File.mp4" }] } } };
             }
-            if (query.includes('listScrapers')) {
-                return { data: { listScrapers: [{ id: 'builtin_autotag', name: 'Ignored' }, { id: 'custom', name: 'Custom Scraper' }] } };
+            if (query.includes("FastTagScraperSources")) {
+                return { data: { configuration: { general: { stashBoxes: [{ name: "StashDB", endpoint: "https://stashdb.org/graphql" }] } } } };
             }
-            if (variables?.source?.scraper_id === 'custom') {
-                return { data: { scrapeSingleScene: [{ title: 'Installed result' }] } };
+            if (query.includes("FastTagInstalledScrapers")) {
+                return { data: { listScrapers: [{ id: "builtin_autotag", name: "Ignored" }, { id: "custom", name: "Custom Scraper" }] } };
+            }
+            if (variables?.source?.scraper_id === "custom") {
+                return { data: { scrapeSingleScene: [{ title: "Installed result" }] } };
             }
             return { data: { scrapeSingleScene: [] } };
         }
     });
-    const card = { querySelector: () => ({ textContent: 'Card Name' }) };
-    const results = await scraper.fetchScraperMatchesForScene('8', card);
-    assert.equal(results[0]._matchType, 'scraper');
-    assert.equal(results[0]._sourceName, 'Custom Scraper');
-    assert.ok(calls.some(call => call.variables?.input?.query === 'a scene'));
-    assert.ok(calls.some(call => call.variables?.input?.query === 'a file'));
-    assert.ok(calls.some(call => call.variables?.input?.query === 'card name'));
-    assert.equal(calls.some(call => call.variables?.source?.scraper_id === 'builtin_autotag'), false);
+
+    const card = { querySelector: () => ({ textContent: "Card Name" }) };
+    // 1. When running default StashDB scrape, if StashDB returns empty, it must NOT call custom scraper
+    const defaultResults = await scraper.fetchScraperMatchesForScene("8", card);
+    assert.deepEqual(defaultResults, [], "default scrape should return no matches if StashDB has no matches, with zero fallback looping");
+    assert.equal(calls.some(call => call.variables?.source?.scraper_id === "custom"), false, "default scrape must never query community scrapers automatically");
+
+    // 2. When explicitly targeting the custom scraper, it queries custom directly
+    const customSource = { type: "scraper", scraperId: "custom", name: "Custom Scraper" };
+    const customResults = await scraper.fetchScraperMatchesForScene("8", card, "", null, customSource);
+    assert.equal(customResults[0]._matchType, "scraper");
+    assert.equal(customResults[0]._sourceName, "Custom Scraper");
+    assert.ok(calls.some(call => call.variables?.source?.scraper_id === "custom" && call.variables?.input?.query === "a scene"));
 }
+
+async function testStashBoxFallbackWhenEnabled() {
+    const fallbackCalls = [];
+    scraper.configure({
+        cleanTitleForScraping,
+        parseDurationSec,
+        getScraperMatchingSettings: () => ({ allowStashBoxFallback: true }),
+        fetchGQL: async (query, variables) => {
+            fallbackCalls.push({ query, variables });
+            if (query.includes("findScene")) {
+                return { data: { findScene: { title: "PornDB Only Scene", files: [{ path: "scene.mp4" }] } } };
+            }
+            if (query.includes("FastTagScraperSources")) {
+                return { data: { configuration: { general: { stashBoxes: [
+                    { name: "StashDB", endpoint: "https://stashdb.org/graphql" },
+                    { name: "The PornDB", endpoint: "https://theporndb.net/graphql" }
+                ] } } } };
+            }
+            if (variables?.source?.stash_box_index === 0) {
+                return { data: { scrapeSingleScene: [] } };
+            }
+            if (variables?.source?.stash_box_index === 1) {
+                return { data: { scrapeSingleScene: [{ title: "PornDB Match" }] } };
+            }
+            return { data: { scrapeSingleScene: [] } };
+        }
+    });
+
+    const results = await scraper.fetchScraperMatchesForScene("10", null);
+    assert.equal(results[0].title, "PornDB Match");
+    assert.equal(results[0]._sourceName, "The PornDB");
+    assert.ok(fallbackCalls.some(call => call.variables?.source?.stash_box_index === 1));
+}
+
 
 async function testManualSearchSkipsHashLookup() {
     const calls = [];
@@ -638,7 +713,7 @@ async function testSupersededSearchStopsBeforeFallbacks() {
     const results = await scraper.fetchScraperMatchesForScene('superseded-scene', null, '', () => current);
     assert.deepEqual(results, []);
     assert.equal(calls.some(call => call.variables?.input?.query), false);
-    assert.equal(calls.some(call => call.query.includes('listScrapers')), false);
+    assert.equal(calls.some(call => call.variables?.input?.query), false, 'no query searches should run after being superseded');
     const completion = timingLogs.find(([, , message]) => message === 'Scrape search completed');
     assert.equal(completion[3].outcome, 'superseded');
     assert.equal(completion[3].attemptCount, 1);
@@ -814,7 +889,8 @@ async function testEntityResolution() {
 
 Promise.resolve()
     .then(testHashMatch)
-    .then(testTitleThenInstalledScraperFallback)
+    .then(testSingleSourceNoAutoLoopAndTargetedScraping)
+    .then(testStashBoxFallbackWhenEnabled)
     .then(testManualSearchSkipsHashLookup)
     .then(testLinkedPerformerFallbackRunsAfterFilenameQueries)
     .then(testPossibleMatchContinuesToStudioPerformerFallback)
