@@ -286,7 +286,7 @@
                 ? await dependencies.loadScraperSources()
                 : { stashBoxes: [], scrapers: [], all: [] };
             const activeSource = typeof dependencies?.resolveActiveSource === "function"
-                ? dependencies.resolveActiveSource(sources)
+                ? dependencies.resolveActiveSource(sources, popup?._selectedScraperSource || dependencies?.getActiveScraperSource?.() || null)
                 : (sources.all?.[0] || { id: "stashbox_0", name: "StashDB.org" });
             const escapeFn = typeof dependencies?.escapeHtml === "function" ? dependencies.escapeHtml : (s => String(s || ""));
 
@@ -395,6 +395,14 @@
                     if (e.key === "Escape") {
                         e.preventDefault();
                         menu.remove();
+                    } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        for (let i = 0; i < items.length; i++) {
+                            if (items[i].style.display !== "none") {
+                                items[i].click();
+                                break;
+                            }
+                        }
                     }
                 });
 
@@ -574,7 +582,7 @@
         return true;
     }
 
-    function refreshIdleSourceBtn(container) {
+    function refreshIdleSourceBtn(container, explicitSourceId = null) {
         if (!container || !dependencies) return;
         const idleSourceBtn = container.querySelector?.('#fasttag-scrape-idle-source-btn');
         if (!idleSourceBtn) return;
@@ -595,10 +603,11 @@
             idleSourceBtn.title = `Active Scraper: ${name}${isUrlOnly ? ' (URL-only)' : ''} (Click to switch)`;
         };
 
+        const targetSourceId = explicitSourceId || dependencies.getActiveScraperSource?.() || null;
         if (typeof dependencies.loadScraperSources === 'function') {
             dependencies.loadScraperSources().then(sources => {
                 const active = typeof dependencies.resolveActiveSource === 'function'
-                    ? dependencies.resolveActiveSource(sources)
+                    ? dependencies.resolveActiveSource(sources, targetSourceId)
                     : (sources?.all?.[0] || { id: 'stashbox_0', name: 'StashDB.org', shortName: 'StashDB' });
                 updateUI(active);
             }).catch(() => {});
@@ -639,7 +648,7 @@
                 popup.scrapeBtn.innerHTML = dependencies.isEasterEggActive?.() ? '<span>⚡ Scrape 🍫</span>' : '<span>⚡ Scrape</span>';
                 popup.scrapeBtn.title = 'Search this scene manually';
             }
-            refreshIdleSourceBtn(targetContainer);
+            refreshIdleSourceBtn(targetContainer, popup._selectedScraperSource);
             return true;
         }
         const isDark = dependencies.getEffectiveTheme?.() !== 'light';
@@ -688,10 +697,11 @@
                 if (typeof dependencies?.setActiveScraperSource === 'function') {
                     dependencies.setActiveScraperSource(newSourceId);
                 }
-                refreshIdleSourceBtn(targetContainer);
+                popup._selectedScraperSource = newSourceId;
+                refreshIdleSourceBtn(targetContainer, newSourceId);
             });
         }
-        refreshIdleSourceBtn(targetContainer);
+        refreshIdleSourceBtn(targetContainer, popup._selectedScraperSource);
 
 
         if (detached) {
@@ -786,7 +796,8 @@
                     activeSceneId,
                     activeCardElement,
                     '',
-                    () => isRequestCurrent(popup, activeSceneId, scrapeRequestId)
+                    () => isRequestCurrent(popup, activeSceneId, scrapeRequestId),
+                    popup._selectedScraperSource || dependencies.getActiveScraperSource?.() || null
                 );
                 if (!isRequestCurrent(popup, activeSceneId, scrapeRequestId)) return null;
                 if (!matches || matches.length === 0) {
@@ -955,13 +966,14 @@
             ? await dependencies.loadScraperSources()
             : { stashBoxes: [], scrapers: [], all: [] };
         const activeSource = typeof dependencies.resolveActiveSource === 'function'
-            ? dependencies.resolveActiveSource(availableSources)
+            ? dependencies.resolveActiveSource(availableSources, popup?._selectedScraperSource || dependencies?.getActiveScraperSource?.() || null)
             : { id: 'stashbox_0', name: 'StashDB.org', shortName: 'StashDB' };
 
         const handleSourceChange = async (newSourceId) => {
             if (typeof dependencies?.setActiveScraperSource === 'function') {
                 dependencies.setActiveScraperSource(newSourceId);
             }
+            popup._selectedScraperSource = newSourceId;
             const newRequestId = beginRequest(popup, sceneId);
             if (newRequestId == null) return;
             showLoadingState(popup);
@@ -1050,7 +1062,7 @@
                         null,
                         query,
                         () => isRequestCurrent(popup, sceneId, manualRequestId),
-                        dependencies?.getActiveScraperSource?.() || activeSource?.id
+                        popup?._selectedScraperSource || dependencies?.getActiveScraperSource?.() || activeSource?.id
                     );
                     if (!isRequestCurrent(popup, sceneId, manualRequestId)) return;
                     if (!manualResults?.length) {

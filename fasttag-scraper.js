@@ -306,31 +306,37 @@
 
     function resolveActiveSource(sources, requestedSourceOrId = null) {
         const all = Array.isArray(sources?.all) ? sources.all : [];
-        if (requestedSourceOrId && typeof requestedSourceOrId === "object") {
-            const reqId = requestedSourceOrId.id || requestedSourceOrId.scraperId;
-            if (reqId) {
-                const found = all.find(s => s.id === reqId || s.scraperId === reqId || s.id === "scraper:" + reqId);
-                if (found) return found;
-            }
-            return requestedSourceOrId;
+
+        function matchesSource(s, target) {
+            if (!s || !target) return false;
+            const t = typeof target === 'object' ? (target.id || target.scraperId || target.name) : String(target).trim();
+            if (!t) return false;
+            const tLower = t.toLowerCase();
+            if (s.id === t || s.scraperId === t) return true;
+            if (s.id === 'scraper:' + t) return true;
+            if (t.startsWith('scraper:') && (s.scraperId === t.slice(8) || s.id === t)) return true;
+            if (s.name && s.name.toLowerCase() === tLower) return true;
+            if (s.shortName && s.shortName.toLowerCase() === tLower) return true;
+            if (s.endpoint && s.endpoint.toLowerCase() === tLower) return true;
+            return false;
         }
-        if (typeof requestedSourceOrId === "string" && requestedSourceOrId.trim()) {
-            const reqId = requestedSourceOrId.trim();
-            const found = all.find(s => s.id === reqId || s.scraperId === reqId || s.name.toLowerCase() === reqId.toLowerCase());
+
+        if (requestedSourceOrId) {
+            const found = all.find(s => matchesSource(s, requestedSourceOrId));
             if (found) return found;
+            if (typeof requestedSourceOrId === 'object' && requestedSourceOrId.id) return requestedSourceOrId;
         }
 
         const { getActiveScraperSource, getDefaultScraperSource } = getDependencies();
-        const defaultId = getDefaultScraperSource?.() || "stashbox_default";
+        const activeId = getActiveScraperSource?.();
+        if (activeId) {
+            const found = all.find(s => matchesSource(s, activeId));
+            if (found) return found;
+        }
 
-        if (defaultId === "remember_last") {
-            const activeId = getActiveScraperSource?.();
-            if (activeId) {
-                const found = all.find(s => s.id === activeId || s.scraperId === activeId);
-                if (found) return found;
-            }
-        } else if (defaultId && defaultId !== "stashbox_default") {
-            const found = all.find(s => s.id === defaultId || s.scraperId === defaultId);
+        const defaultId = getDefaultScraperSource?.() || 'stashbox_default';
+        if (defaultId && defaultId !== 'stashbox_default' && defaultId !== 'remember_last') {
+            const found = all.find(s => matchesSource(s, defaultId));
             if (found) return found;
         }
 

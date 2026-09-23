@@ -959,7 +959,7 @@ async function testDirectUrlAndInstalledScraperUrlFallback() {
 
 function testDefaultScraperSourcePrecedence() {
     let mockDefault = 'stashbox_default';
-    let mockActive = 'scraper:Men';
+    let mockActive = null;
     scraper.configure({
         getDefaultScraperSource: () => mockDefault,
         getActiveScraperSource: () => mockActive
@@ -978,23 +978,28 @@ function testDefaultScraperSourcePrecedence() {
         ]
     };
 
-    // 1. When default is stashbox_default, StashDB must be returned (ignoring sticky mockActive)
+    // 1. When default is stashbox_default and no active override, StashDB must be returned
     const resolvedStashDb = scraper.resolveActiveSource(sources);
-    assert.equal(resolvedStashDb.id, 'stashbox_0', 'default stashbox_default must resolve to StashDB and not sticky last-used');
+    assert.equal(resolvedStashDb.id, 'stashbox_0', 'default stashbox_default must resolve to StashDB when no active selection');
 
-    // 2. When default is remember_last, mockActive must be respected
-    mockDefault = 'remember_last';
-    const resolvedRemember = scraper.resolveActiveSource(sources);
-    assert.equal(resolvedRemember.id, 'scraper:Men', 'remember_last must respect active source from storage');
+    // 2. When active source is set (e.g. user selected Men.com in UI), that active selection must be respected
+    mockActive = 'scraper:Men';
+    const resolvedActive = scraper.resolveActiveSource(sources);
+    assert.equal(resolvedActive.id, 'scraper:Men', 'active selection from UI must take precedence over default');
 
-    // 3. When default is a specific scraper, that scraper must be returned
+    // 3. When default is a specific scraper, that scraper must be returned when no active selection
+    mockActive = null;
     mockDefault = 'scraper:Falcon';
     const resolvedSpecific = scraper.resolveActiveSource(sources);
-    assert.equal(resolvedSpecific.id, 'scraper:Falcon', 'specific default source must be returned');
+    assert.equal(resolvedSpecific.id, 'scraper:Falcon', 'specific default source must be returned when no active selection');
 
     // 4. When an explicit requested source is provided, it always overrides default
     const resolvedExplicit = scraper.resolveActiveSource(sources, 'scraper:Men');
     assert.equal(resolvedExplicit.id, 'scraper:Men', 'explicit source argument must always take precedence');
+
+    // 5. Test matching by scraperId or name
+    assert.equal(scraper.resolveActiveSource(sources, 'Men').id, 'scraper:Men', 'matching by scraperId Men');
+    assert.equal(scraper.resolveActiveSource(sources, 'Men.com').id, 'scraper:Men', 'matching by scraper name Men.com');
 }
 
 Promise.resolve()

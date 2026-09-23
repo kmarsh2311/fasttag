@@ -6044,6 +6044,14 @@
             popup.currentSceneId = sceneId;
             popup.currentCardElement = cardElement;
 
+            const defaultSource = typeof getDefaultScraperSource === 'function' ? getDefaultScraperSource() : 'stashbox_default';
+            if (defaultSource !== 'remember_last') {
+                if (typeof setActiveScraperSource === 'function') {
+                    setActiveScraperSource(null);
+                }
+                popup._selectedScraperSource = null;
+            }
+
             const scraperWasOpen = Boolean(window._fastTagEverythingScraperOpen || isScraperHudPersistedOpen());
             const scraperShouldRemainOpen = Boolean(getAutoScrapeSequential() && sequentialEditState.enabled && scraperWasOpen);
             if (scraperShouldRemainOpen) {
