@@ -244,6 +244,9 @@
             const val = String(sourceId || 'stashbox_default');
             root.localStorage.setItem(KEYS.defaultScraperSource, val);
             setScraperMatchingSettings({ defaultScraperSource: val, preset: 'custom' });
+            if (val !== 'remember_last') {
+                root.localStorage.removeItem(KEYS.activeScraperSource);
+            }
             return val;
         } catch (e) {
             return 'stashbox_default';

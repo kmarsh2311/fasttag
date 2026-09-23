@@ -956,6 +956,47 @@ async function testDirectUrlAndInstalledScraperUrlFallback() {
     assert.ok(calls.some(c => c.variables?.source?.scraper_id === "Men" && c.variables?.input?.scene_id === "99"));
 }
 
+
+function testDefaultScraperSourcePrecedence() {
+    let mockDefault = 'stashbox_default';
+    let mockActive = 'scraper:Men';
+    scraper.configure({
+        getDefaultScraperSource: () => mockDefault,
+        getActiveScraperSource: () => mockActive
+    });
+
+    const sources = {
+        all: [
+            { id: 'stashbox_0', name: 'StashDB.org', isStashBox: true, endpoint: 'https://stashdb.org/graphql' },
+            { id: 'scraper:Men', scraperId: 'Men', name: 'Men.com' },
+            { id: 'scraper:Falcon', scraperId: 'Falcon', name: 'Falcon Studios' }
+        ],
+        stashBoxes: [{ id: 'stashbox_0', name: 'StashDB.org' }],
+        scrapers: [
+            { id: 'scraper:Men', scraperId: 'Men', name: 'Men.com' },
+            { id: 'scraper:Falcon', scraperId: 'Falcon', name: 'Falcon Studios' }
+        ]
+    };
+
+    // 1. When default is stashbox_default, StashDB must be returned (ignoring sticky mockActive)
+    const resolvedStashDb = scraper.resolveActiveSource(sources);
+    assert.equal(resolvedStashDb.id, 'stashbox_0', 'default stashbox_default must resolve to StashDB and not sticky last-used');
+
+    // 2. When default is remember_last, mockActive must be respected
+    mockDefault = 'remember_last';
+    const resolvedRemember = scraper.resolveActiveSource(sources);
+    assert.equal(resolvedRemember.id, 'scraper:Men', 'remember_last must respect active source from storage');
+
+    // 3. When default is a specific scraper, that scraper must be returned
+    mockDefault = 'scraper:Falcon';
+    const resolvedSpecific = scraper.resolveActiveSource(sources);
+    assert.equal(resolvedSpecific.id, 'scraper:Falcon', 'specific default source must be returned');
+
+    // 4. When an explicit requested source is provided, it always overrides default
+    const resolvedExplicit = scraper.resolveActiveSource(sources, 'scraper:Men');
+    assert.equal(resolvedExplicit.id, 'scraper:Men', 'explicit source argument must always take precedence');
+}
+
 Promise.resolve()
     .then(testHashMatch)
     .then(testSingleSourceNoAutoLoopAndTargetedScraping)
@@ -966,6 +1007,7 @@ Promise.resolve()
     .then(testSupersededSearchStopsBeforeFallbacks)
     .then(testEntityResolution)
     .then(testDirectUrlAndInstalledScraperUrlFallback)
+    .then(testDefaultScraperSourcePrecedence)
     .then(() => console.log('fasttag-scraper tests passed'))
     .catch(error => {
         console.error(error);

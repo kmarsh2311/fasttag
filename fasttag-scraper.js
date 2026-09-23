@@ -321,14 +321,15 @@
         }
 
         const { getActiveScraperSource, getDefaultScraperSource } = getDependencies();
-        const activeId = getActiveScraperSource?.();
-        if (activeId) {
-            const found = all.find(s => s.id === activeId || s.scraperId === activeId);
-            if (found) return found;
-        }
+        const defaultId = getDefaultScraperSource?.() || "stashbox_default";
 
-        const defaultId = getDefaultScraperSource?.();
-        if (defaultId && defaultId !== "stashbox_default") {
+        if (defaultId === "remember_last") {
+            const activeId = getActiveScraperSource?.();
+            if (activeId) {
+                const found = all.find(s => s.id === activeId || s.scraperId === activeId);
+                if (found) return found;
+            }
+        } else if (defaultId && defaultId !== "stashbox_default") {
             const found = all.find(s => s.id === defaultId || s.scraperId === defaultId);
             if (found) return found;
         }

@@ -23,6 +23,8 @@
             getFillMissingPerformerImages,
             getDefaultScraperSource,
             setDefaultScraperSource,
+            getActiveScraperSource,
+            setActiveScraperSource,
             getAllowStashBoxFallback,
             setAllowStashBoxFallback,
             loadScraperSources,
@@ -268,12 +270,13 @@
                     <div id="fasttag-tab-pane-scraper" class="fasttag-tab-pane" style="display: none; flex-direction: column; gap: 14px;">
                         <!-- Default Scraper Source setting -->
                         <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 8px; background: ${cardBg}; border: 1px solid ${border};">
-                            <label for="fasttag-setting-default-scraper-source" style="font-weight: 600; font-size: 13px; color: ${text};">Default Scraper Source</label>
+                            <label for="fasttag-setting-default-scraper-btn" style="font-weight: 600; font-size: 13px; color: ${text};">Default Scraper Source</label>
                             <div style="font-size: 11px; color: ${textMuted};">Select which scraper FastTag queries first when opening a scene.</div>
-                            <select id="fasttag-setting-default-scraper-source" style="margin-top: 4px; padding: 6px 8px; border-radius: 6px; border: 1px solid ${border}; background: ${bg}; color: ${text}; font-size: 11.5px; outline: none; cursor: pointer;">
-                                <option value="stashbox_default">Default Stash-box (StashDB.org)</option>
-                                <option value="remember_last">Remember Last Used</option>
-                            </select>
+                            <input type="hidden" id="fasttag-setting-default-scraper-source" value="stashbox_default">
+                            <button type="button" id="fasttag-setting-default-scraper-btn" style="margin-top: 4px; padding: 6px 10px; border-radius: 6px; border: 1px solid ${border}; background: ${bg}; color: ${text}; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; transition: all 0.15s ease;">
+                                <span id="fasttag-setting-default-scraper-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">🌐 Default Stash-box (StashDB.org)</span>
+                                <span style="font-size: 8px; opacity: 0.7; flex-shrink: 0;">▼</span>
+                            </button>
                         </div>
 
                         <!-- Fallback to alternate Stash-box endpoints -->
@@ -884,43 +887,187 @@
 
         
         // TAB 3: Default scraper source and Stash-box fallback wiring
-        const defaultSourceSelect = modal.querySelector("#fasttag-setting-default-scraper-source");
+        const defaultSourceInput = modal.querySelector("#fasttag-setting-default-scraper-source");
+        const defaultSourceBtn = modal.querySelector("#fasttag-setting-default-scraper-btn");
+        const defaultSourceLabel = modal.querySelector("#fasttag-setting-default-scraper-label");
         const fallbackCheckbox = modal.querySelector("#fasttag-setting-allow-stashbox-fallback");
 
-        if (defaultSourceSelect && typeof loadScraperSources === "function") {
+        let cachedSourcesList = null;
+
+        const updateDefaultSourceBtnLabel = (sourceId, sources) => {
+            if (!defaultSourceLabel) return;
+            if (sourceId === "stashbox_default") {
+                defaultSourceLabel.textContent = "🌐 Default Stash-box (StashDB.org)";
+                return;
+            }
+            if (sourceId === "remember_last") {
+                defaultSourceLabel.textContent = "🔄 Remember Last Used";
+                return;
+            }
+            const all = sources?.all || [];
+            const found = all.find(s => s.id === sourceId || s.scraperId === sourceId);
+            if (found) {
+                const icon = found.isStashBox ? "🌐" : (found.isUrlOnly ? "🔗" : "⚡");
+                defaultSourceLabel.textContent = `${icon} ${found.name}`;
+            } else {
+                defaultSourceLabel.textContent = sourceId;
+            }
+        };
+
+        if (defaultSourceBtn && typeof loadScraperSources === "function") {
             loadScraperSources().then(sources => {
-                if (!sources) return;
+                cachedSourcesList = sources;
                 const currentDefault = typeof getDefaultScraperSource === "function" ? getDefaultScraperSource() : "stashbox_default";
-                let html = "<option value=\"stashbox_default\">Default Stash-box (StashDB.org)</option>";
-                html += "<option value=\"remember_last\"" + (currentDefault === "remember_last" ? " selected" : "") + ">Remember Last Used</option>";
+                if (defaultSourceInput) defaultSourceInput.value = currentDefault;
+                updateDefaultSourceBtnLabel(currentDefault, sources);
+            }).catch(() => {});
+
+            defaultSourceBtn.addEventListener("click", async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const existingMenu = root.document.getElementById("fasttag-settings-source-dropdown-menu");
+                if (existingMenu) {
+                    existingMenu.remove();
+                    return;
+                }
+
+                const sources = cachedSourcesList || (typeof loadScraperSources === "function" ? await loadScraperSources().catch(() => null) : null) || { stashBoxes: [], scrapers: [], all: [] };
+                cachedSourcesList = sources;
+                const currentDefault = typeof getDefaultScraperSource === "function" ? getDefaultScraperSource() : "stashbox_default";
+
+                const menu = root.document.createElement("div");
+                menu.id = "fasttag-settings-source-dropdown-menu";
+                menu.style.cssText = `position: fixed; z-index: 10000004; background: ${isDark ? "#0f172a" : "#ffffff"}; border: 1px solid ${isDark ? "rgba(129, 140, 248, 0.45)" : "#a5b4fc"}; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: 6px; width: 300px; max-height: 280px; font-family: inherit; font-size: 11px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; overflow: hidden;`;
+
+                const rect = defaultSourceBtn.getBoundingClientRect();
+                let top = rect.bottom + 4;
+                let left = rect.left;
+                if (top + 280 > root.innerHeight) top = Math.max(8, rect.top - 285);
+                if (left + 300 > root.innerWidth) left = Math.max(8, root.innerWidth - 310);
+                menu.style.top = `${top}px`;
+                menu.style.left = `${left}px`;
+
+                menu.addEventListener("mousedown", (ev) => ev.stopPropagation());
+                menu.addEventListener("click", (ev) => ev.stopPropagation());
+
+                let menuHtml = `
+                    <div style="padding: 2px 2px 4px 2px; border-bottom: 1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}; flex-shrink: 0;">
+                        <input id="fasttag-settings-source-search" type="text" placeholder="Search scrapers…" autocomplete="off" style="width: 100%; box-sizing: border-box; height: 26px; padding: 3px 8px; border-radius: 5px; border: 1px solid ${isDark ? "rgba(129, 140, 248, 0.45)" : "#a5b4fc"}; background: ${isDark ? "#1e293b" : "#f1f5f9"}; color: ${isDark ? "#e0e7ff" : "#1e293b"}; font-size: 11px; outline: none;">
+                    </div>
+                    <div id="fasttag-settings-source-list" style="overflow-y: auto; max-height: 230px; display: flex; flex-direction: column; gap: 1px; padding-right: 2px;">
+                        <div style="padding: 4px 6px 2px; font-size: 9.5px; font-weight: 700; color: ${isDark ? "#94a3b8" : "#64748b"}; text-transform: uppercase; letter-spacing: 0.5px;" data-section="builtin">Defaults</div>
+                        <div class="fasttag-settings-source-item" data-value="stashbox_default" data-name="default stash-box stashdb.org" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${currentDefault === 'stashbox_default' ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${currentDefault === 'stashbox_default' ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${currentDefault === 'stashbox_default' ? "700" : "500"};">
+                            <span>🌐 Default Stash-box (StashDB.org)</span>
+                            ${currentDefault === 'stashbox_default' ? '<span style="color:#6366f1;font-weight:800;font-size:12px;">✓</span>' : ''}
+                        </div>
+                        <div class="fasttag-settings-source-item" data-value="remember_last" data-name="remember last used" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${currentDefault === 'remember_last' ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${currentDefault === 'remember_last' ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${currentDefault === 'remember_last' ? "700" : "500"};">
+                            <span>🔄 Remember Last Used</span>
+                            ${currentDefault === 'remember_last' ? '<span style="color:#6366f1;font-weight:800;font-size:12px;">✓</span>' : ''}
+                        </div>
+                `;
 
                 if (sources.stashBoxes && sources.stashBoxes.length > 0) {
-                    html += "<optgroup label=\"Stash-box Endpoints\">";
+                    menuHtml += `<div style="padding: 6px 6px 2px; font-size: 9.5px; font-weight: 700; color: ${isDark ? "#94a3b8" : "#64748b"}; text-transform: uppercase; letter-spacing: 0.5px;" data-section="stashbox">Stash-box Endpoints</div>`;
                     sources.stashBoxes.forEach(box => {
-                        const selected = currentDefault === box.id ? " selected" : "";
-                        html += "<option value=\"" + box.id + "\"" + selected + ">🌐 " + box.name + "</option>";
+                        const isSelected = currentDefault === box.id;
+                        menuHtml += `
+                            <div class="fasttag-settings-source-item" data-value="${box.id}" data-name="${(box.name || '').toLowerCase()}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"};">
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">🌐 ${box.name}</span>
+                                ${isSelected ? '<span style="color:#6366f1;font-weight:800;font-size:12px;">✓</span>' : ''}
+                            </div>
+                        `;
                     });
-                    html += "</optgroup>";
                 }
 
                 if (sources.scrapers && sources.scrapers.length > 0) {
-                    html += "<optgroup label=\"Installed Scrapers\">";
+                    menuHtml += `<div style="padding: 6px 6px 2px; font-size: 9.5px; font-weight: 700; color: ${isDark ? "#94a3b8" : "#64748b"}; text-transform: uppercase; letter-spacing: 0.5px;" data-section="installed">Installed Scrapers</div>`;
                     sources.scrapers.forEach(scraper => {
-                        const selected = currentDefault === scraper.id ? " selected" : "";
-                        html += "<option value=\"" + scraper.id + "\"" + selected + ">⚡ " + scraper.name + "</option>";
+                        const isSelected = currentDefault === scraper.id;
+                        const icon = scraper.isUrlOnly ? "🔗" : "⚡";
+                        const badge = scraper.isUrlOnly
+                            ? `<span style="font-size: 8px; font-weight: 700; padding: 1.5px 4px; border-radius: 4px; background: ${isDark ? "rgba(56, 189, 248, 0.18)" : "rgba(14, 165, 233, 0.15)"}; color: ${isDark ? "#38bdf8" : "#0284c7"}; text-transform: uppercase;">URL Only</span>`
+                            : "";
+                        menuHtml += `
+                            <div class="fasttag-settings-source-item" data-value="${scraper.id}" data-name="${(scraper.name || '').toLowerCase()}" style="padding: 5px 7px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 6px; background: ${isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent"}; color: ${isSelected ? (isDark ? "#e0e7ff" : "#312e81") : (isDark ? "#cbd5e1" : "#334155")}; font-weight: ${isSelected ? "700" : "500"};">
+                                <span style="display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                                    <span>${icon}</span><span title="${scraper.name}">${scraper.name}</span>
+                                </span>
+                                <span style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                                    ${badge}
+                                    ${isSelected ? '<span style="color:#6366f1;font-weight:800;font-size:12px;">✓</span>' : ''}
+                                </span>
+                            </div>
+                        `;
                     });
-                    html += "</optgroup>";
                 }
-                defaultSourceSelect.innerHTML = html;
-                defaultSourceSelect.value = currentDefault;
-            }).catch((e) => console.log("[FastTag] Error loading sources for settings:", e));
 
-            defaultSourceSelect.addEventListener("change", (e) => {
-                if (typeof setDefaultScraperSource === "function") {
-                    setDefaultScraperSource(e.target.value);
-                    const selectedText = e.target.options[e.target.selectedIndex]?.text || e.target.value;
-                    showToast("Default scraper set to: " + selectedText, "info");
+                menuHtml += `
+                    <div id="fasttag-settings-source-empty" style="display: none; padding: 10px 8px; text-align: center; color: ${isDark ? "#94a3b8" : "#64748b"}; font-size: 10.5px;">No scrapers found</div>
+                    </div>
+                `;
+
+                menu.innerHTML = menuHtml;
+                root.document.body.appendChild(menu);
+
+                const searchInput = menu.querySelector("#fasttag-settings-source-search");
+                const items = menu.querySelectorAll(".fasttag-settings-source-item");
+                const emptyMsg = menu.querySelector("#fasttag-settings-source-empty");
+
+                if (searchInput) {
+                    searchInput.addEventListener("input", () => {
+                        const q = (searchInput.value || "").trim().toLowerCase();
+                        let visible = 0;
+                        items.forEach(item => {
+                            const name = item.dataset.name || "";
+                            const matches = !q || name.includes(q);
+                            item.style.display = matches ? "flex" : "none";
+                            if (matches) visible++;
+                        });
+                        if (emptyMsg) emptyMsg.style.display = visible === 0 ? "block" : "none";
+                    });
+                    searchInput.addEventListener("keydown", (ev) => {
+                        ev.stopPropagation();
+                        if (ev.key === "Escape") menu.remove();
+                    });
+                    setTimeout(() => searchInput.focus(), 30);
                 }
+
+                const closeMenu = (ev) => {
+                    if (!menu.contains(ev.target) && ev.target !== defaultSourceBtn && !defaultSourceBtn.contains(ev.target)) {
+                        menu.remove();
+                        root.document.removeEventListener("mousedown", closeMenu);
+                    }
+                };
+                setTimeout(() => root.document.addEventListener("mousedown", closeMenu), 0);
+
+                items.forEach(item => {
+                    item.addEventListener("mouseenter", () => {
+                        item.style.background = isDark ? "rgba(99, 102, 241, 0.35)" : "rgba(99, 102, 241, 0.2)";
+                    });
+                    item.addEventListener("mouseleave", () => {
+                        const isSelected = item.dataset.value === currentDefault;
+                        item.style.background = isSelected ? (isDark ? "rgba(99, 102, 241, 0.25)" : "rgba(99, 102, 241, 0.15)") : "transparent";
+                    });
+                    item.addEventListener("click", () => {
+                        const val = item.dataset.value;
+                        menu.remove();
+                        root.document.removeEventListener("mousedown", closeMenu);
+                        if (typeof setDefaultScraperSource === "function") {
+                            setDefaultScraperSource(val);
+                        }
+                        if (val !== "remember_last") {
+                            if (typeof setActiveScraperSource === "function") {
+                                setActiveScraperSource(null);
+                            }
+                            root.FastTagStorage?.setActiveScraperSource?.(null);
+                        }
+                        if (defaultSourceInput) defaultSourceInput.value = val;
+                        updateDefaultSourceBtnLabel(val, sources);
+                        const labelText = item.querySelector("span")?.textContent?.trim() || val;
+                        showToast("Default scraper set to: " + labelText, "info");
+                    });
+                });
             });
         }
 

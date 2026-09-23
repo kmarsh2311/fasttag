@@ -1955,6 +1955,8 @@
             getScraperMatchingSettings,
             getDefaultScraperSource,
             setDefaultScraperSource,
+            getActiveScraperSource,
+            setActiveScraperSource,
             getAllowStashBoxFallback,
             setAllowStashBoxFallback,
             loadScraperSources,
