@@ -887,6 +887,75 @@ async function testEntityResolution() {
     assert.ok(cacheWrites.some(([type, data]) => type === 'performers' && data === null), 'creation should invalidate the performer cache');
 }
 
+
+async function testDirectUrlAndInstalledScraperUrlFallback() {
+    const calls = [];
+    scraper.configure({
+        cleanTitleForScraping,
+        parseDurationSec,
+        fetchGQL: async (query, variables) => {
+            calls.push({ query, variables });
+            if (query.includes("findScene")) {
+                return {
+                    data: {
+                        findScene: {
+                            id: "99",
+                            title: "Good Rubber Part 2",
+                            urls: ["https://www.men.com/sceneid/9477731/good-rubber-part-2"],
+                            files: [{ path: "Good_Rubber_Part_2.mp4" }]
+                        }
+                    }
+                };
+            }
+            if (query.includes("FastTagScraperSources")) {
+                return { data: { configuration: { general: { stashBoxes: [{ name: "StashDB", endpoint: "https://stashdb.org/graphql" }] } } } };
+            }
+            if (query.includes("FastTagInstalledScrapers")) {
+                return { data: { listScrapers: [{ id: "Men", name: "Men.com" }] } };
+            }
+            if (query.includes("FastTagScrapeSceneURL") && variables?.url === "https://www.men.com/sceneid/9477731/good-rubber-part-2") {
+                return {
+                    data: {
+                        scrapeSceneURL: {
+                            title: "Good Rubber Part 2",
+                            date: "2023-11-03",
+                            studio: { name: "Men.com" }
+                        }
+                    }
+                };
+            }
+            if (variables?.source?.scraper_id === "Men" && variables?.input?.scene_id === "99") {
+                return {
+                    data: {
+                        scrapeSingleScene: [{
+                            title: "Good Rubber Part 2",
+                            date: "2023-11-03",
+                            studio: { name: "Men.com" }
+                        }]
+                    }
+                };
+            }
+            return { data: { scrapeSingleScene: [] } };
+        }
+    });
+
+    const card = { querySelector: () => ({ textContent: "Good Rubber Part 2" }) };
+
+    // 1. Direct URL pasted into search query: calls scrapeSceneURL
+    const urlResults = await scraper.fetchScraperMatchesForScene("99", card, "https://www.men.com/sceneid/9477731/good-rubber-part-2");
+    assert.equal(urlResults.length, 1);
+    assert.equal(urlResults[0].title, "Good Rubber Part 2");
+    assert.equal(urlResults[0]._matchType, "url");
+    assert.ok(calls.some(c => c.query.includes("FastTagScrapeSceneURL")));
+
+    // 2. Installed scraper targeted on scene with existing URL: uses scene_id lookup first
+    const menSource = { type: "scraper", scraperId: "Men", name: "Men.com" };
+    const sceneIdResults = await scraper.fetchScraperMatchesForScene("99", card, "", null, menSource);
+    assert.equal(sceneIdResults.length, 1);
+    assert.equal(sceneIdResults[0].title, "Good Rubber Part 2");
+    assert.ok(calls.some(c => c.variables?.source?.scraper_id === "Men" && c.variables?.input?.scene_id === "99"));
+}
+
 Promise.resolve()
     .then(testHashMatch)
     .then(testSingleSourceNoAutoLoopAndTargetedScraping)
@@ -896,6 +965,7 @@ Promise.resolve()
     .then(testPossibleMatchContinuesToStudioPerformerFallback)
     .then(testSupersededSearchStopsBeforeFallbacks)
     .then(testEntityResolution)
+    .then(testDirectUrlAndInstalledScraperUrlFallback)
     .then(() => console.log('fasttag-scraper tests passed'))
     .catch(error => {
         console.error(error);

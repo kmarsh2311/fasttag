@@ -1,6 +1,31 @@
 (function initializeFastTagScraper(root) {
     'use strict';
 
+    const SCRAPE_URL_QUERY = `
+        query FastTagScrapeSceneURL($url: String!) {
+            scrapeSceneURL(url: $url) {
+                title
+                code
+                details
+                director
+                urls
+                date
+                image
+                remote_site_id
+                duration
+                fingerprints { algorithm hash duration }
+                studio { stored_id name image }
+                tags { stored_id name }
+                performers { stored_id name gender images remote_site_id urls }
+            }
+        }
+    `;
+
+    function isUrl(str) {
+        if (!str || typeof str !== "string") return false;
+        return /^https?:\/\/\S+/i.test(str.trim());
+    }
+
     const SCRAPE_QUERY = `
         query FastTagScrapeSingleScene($source: ScraperSourceInput!, $input: ScrapeSingleSceneInput!) {
             scrapeSingleScene(source: $source, input: $input) {
@@ -996,11 +1021,12 @@
         let localFingerprints = [];
         let linkedPerformers = [];
         let localStudio = null;
+        let sceneUrls = [];
         let sceneContextLoaded = false;
 
         const contextStartedAt = Date.now();
         try {
-            const query = 'query ($id: ID!) { findScene(id: $id) { id title details studio { id name } performers { id name alias_list } files { path duration fingerprints { type value } } } }';
+            const query = 'query ($id: ID!) { findScene(id: $id) { id title details urls studio { id name } performers { id name alias_list } files { path duration fingerprints { type value } } } }';
             const response = await fetchGQL(query, { id: sceneId });
             const scene = response?.data?.findScene;
             if (scene) {
@@ -1015,6 +1041,7 @@
                 if (firstFile?.fingerprints) localFingerprints = firstFile.fingerprints;
                 linkedPerformers = scene.performers || [];
                 localStudio = scene.studio || null;
+                sceneUrls = Array.isArray(scene.urls) ? scene.urls.filter(Boolean) : [];
             }
             debugTiming('Scene context loaded', {
                 durationMs: Date.now() - contextStartedAt,
@@ -1047,6 +1074,45 @@
         );
 
         const cleanedManualQuery = manualQuery ? getDependencies().cleanTitleForScraping(manualQuery) : "";
+        // Check if manual query is a direct URL
+        const rawManualQuery = String(manualQuery || "").trim();
+        if (isUrl(rawManualQuery)) {
+            const attemptStartedAt = Date.now();
+            attemptCount += 1;
+            try {
+                const urlResponse = await fetchGQL(SCRAPE_URL_QUERY, { url: rawManualQuery });
+                const urlMatch = urlResponse?.data?.scrapeSceneURL;
+                debugTiming("Direct URL scrape completed", {
+                    attempt: attemptCount,
+                    durationMs: Date.now() - attemptStartedAt,
+                    url: rawManualQuery,
+                    found: Boolean(urlMatch)
+                });
+                if (!isStillCurrent()) return finish("superseded", []);
+                if (urlMatch && typeof urlMatch === "object") {
+                    const studioName = urlMatch.studio?.name;
+                    const sourceName = studioName || (activeSource ? activeSource.name : "URL Scraper");
+                    const enriched = enrich([urlMatch], "url", sourceName, activeSource);
+                    enriched.forEach(match => {
+                        match._matchedSearchQuery = rawManualQuery;
+                        match._searchQuery = rawManualQuery;
+                    });
+                    return finish("url-match", enriched, {
+                        attemptCount,
+                        decisiveQuery: rawManualQuery,
+                        decisiveSource: sourceName
+                    });
+                }
+            } catch (urlError) {
+                debugTiming("Direct URL scrape failed, continuing to regular search", {
+                    attempt: attemptCount,
+                    durationMs: Date.now() - attemptStartedAt,
+                    url: rawManualQuery,
+                    error: String(urlError?.message || urlError)
+                });
+            }
+        }
+
         const cardText = cardElement
             ? (cardElement.querySelector(".title, .card-title, .scene-card__title")?.textContent || "").trim()
             : "";
@@ -1176,6 +1242,90 @@
         // Helper to query a single installed community scraper
         const queryInstalledScraper = async (scraperSource) => {
             const scraperId = scraperSource.scraperId || scraperSource.id;
+
+            // 1. Direct URL Query: If manual query is a URL, query scrapeSceneURL directly
+            const manualQueryTrimmed = String(editableSearchQuery || "").trim();
+            if (isUrl(manualQueryTrimmed)) {
+                const attemptStartedAt = Date.now();
+                attemptCount += 1;
+                try {
+                    const urlResponse = await fetchGQL(SCRAPE_URL_QUERY, { url: manualQueryTrimmed });
+                    const urlMatch = urlResponse?.data?.scrapeSceneURL;
+                    debugTiming("URL scraper query completed", {
+                        attempt: attemptCount,
+                        durationMs: Date.now() - attemptStartedAt,
+                        source: scraperSource.name || scraperId,
+                        url: manualQueryTrimmed,
+                        found: Boolean(urlMatch)
+                    });
+                    if (!isStillCurrent()) return { superseded: true };
+                    if (urlMatch && typeof urlMatch === "object") {
+                        const enriched = enrich([urlMatch], "url", scraperSource.name || "Scraper", scraperSource);
+                        enriched.forEach(match => {
+                            match._matchedSearchQuery = manualQueryTrimmed;
+                            match._searchQuery = manualQueryTrimmed;
+                        });
+                        return {
+                            matches: enriched,
+                            decisive: true,
+                            outcome: "installed-scraper-match",
+                            decisiveQuery: manualQueryTrimmed,
+                            decisiveSource: scraperSource.name || scraperId
+                        };
+                    }
+                } catch (urlError) {
+                    debugTiming("URL scraper query failed, falling back to candidates", {
+                        attempt: attemptCount,
+                        durationMs: Date.now() - attemptStartedAt,
+                        source: scraperSource.name || scraperId,
+                        url: manualQueryTrimmed,
+                        error: String(urlError?.message || urlError)
+                    });
+                }
+            }
+
+            // 2. Scene ID Lookup: If scene has existing URLs and no manual query was entered, try scene_id lookup first
+            if (sceneId && sceneUrls.length > 0 && !cleanedManualQuery) {
+                const attemptStartedAt = Date.now();
+                attemptCount += 1;
+                try {
+                    const directResponse = await fetchGQL(SCRAPE_QUERY, {
+                        source: { scraper_id: scraperId },
+                        input: { scene_id: String(sceneId) }
+                    });
+                    const directMatches = directResponse?.data?.scrapeSingleScene;
+                    debugTiming("Installed scraper scene_id lookup completed", {
+                        attempt: attemptCount,
+                        durationMs: Date.now() - attemptStartedAt,
+                        source: scraperSource.name || scraperId,
+                        resultCount: Array.isArray(directMatches) ? directMatches.length : 0
+                    });
+                    if (!isStillCurrent()) return { superseded: true };
+                    if (Array.isArray(directMatches) && directMatches.length > 0) {
+                        const enriched = enrich(directMatches, "scene-id", scraperSource.name || "Scraper", scraperSource);
+                        enriched.forEach(match => {
+                            match._matchedSearchQuery = "scene_id:" + sceneId;
+                            match._searchQuery = editableSearchQuery || ("scene_id:" + sceneId);
+                        });
+                        return {
+                            matches: enriched,
+                            decisive: true,
+                            outcome: "installed-scraper-match",
+                            decisiveQuery: "scene_id:" + sceneId,
+                            decisiveSource: scraperSource.name || scraperId
+                        };
+                    }
+                } catch (sceneIdError) {
+                    debugTiming("Installed scraper scene_id lookup skipped/failed, proceeding to query terms", {
+                        attempt: attemptCount,
+                        durationMs: Date.now() - attemptStartedAt,
+                        source: scraperSource.name || scraperId,
+                        error: String(sceneIdError?.message || sceneIdError)
+                    });
+                }
+            }
+
+            // 3. Fallback: Search candidate queries by name/title
             for (const queryTerm of candidateQueries) {
                 if (!isStillCurrent()) return { superseded: true };
                 if (!queryTerm || queryTerm.length < 2) continue;
