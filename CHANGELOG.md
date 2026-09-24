@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.5.2] - 2026-09-24
+
+### Changed
+- **Toast Notification Duration**: Reduced error toast duration from 8 seconds (and 15s in debug mode) to 3 seconds, so error/notice messages dismiss quickly and unobtrusively. Reduced mouse-hover exit dismiss delay from 5s to 1.5s.
+
 ## [4.5.1] - 2026-09-24
 
 ### Added

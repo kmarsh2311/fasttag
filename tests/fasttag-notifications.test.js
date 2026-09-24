@@ -82,11 +82,15 @@ notifications.showToast('debug', 'error', 1000, { code: 7 });
 const debugToast = body.children[0];
 assert.match(debugToast.innerHTML, /fasttag-toast-copy-btn/);
 assert.match(debugToast.innerHTML, /fasttag-toast-close-btn/);
-assert.equal(timers.at(-1).delay, 15000, 'debug mode should retain toasts for at least 15 seconds');
+assert.equal(timers.at(-1).delay, 5000, 'debug mode should retain toasts for at least 5 seconds');
 assert.equal(logs.at(-1)[0], 'ERROR');
+notifications.configure({ getDebugMode: () => false });
+notifications.toastError('quick error');
+assert.equal(timers.at(-1).delay, 3000, 'toastError default duration should be 3000ms');
+
 
 debugToast.listeners.get('mouseleave')();
-assert.equal(timers.at(-1).delay, 5000, 'hover exit should use the capped redisplay duration');
+assert.equal(timers.at(-1).delay, 1500, 'hover exit should use the capped redisplay duration');
 
 (async () => {
     let clipboardText = '';

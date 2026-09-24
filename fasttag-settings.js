@@ -1123,7 +1123,7 @@
             helpBtn.textContent = '⏳ Loading Guide…';
             try {
                 const help = await loadFastTagHelpModule();
-                help.openGuide({ theme: getEffectiveTheme(), version: '4.5.1' });
+                help.openGuide({ theme: getEffectiveTheme(), version: '4.5.2' });
             } catch (error) {
                 toastError(`Unable to open help: ${error.message}`);
             } finally {

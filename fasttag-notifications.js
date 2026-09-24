@@ -47,7 +47,7 @@
     function showToast(message, type = 'success', duration = 3000, debugPayload = null) {
         try {
             const isDebug = getDebugMode();
-            const effectiveDuration = isDebug ? Math.max(duration, 15000) : duration;
+            const effectiveDuration = isDebug ? Math.max(duration, 5000) : duration;
             log(type === 'error' ? 'ERROR' : (type === 'info' ? 'INFO' : 'ACTION'), 'TOAST', message, debugPayload);
 
             root.document.getElementById('fasttag-native-toast')?.remove();
@@ -137,7 +137,7 @@
             toast.addEventListener('mouseenter', () => {
                 if (dismissTimer) root.clearTimeout(dismissTimer);
             });
-            toast.addEventListener('mouseleave', () => startDismiss(Math.min(effectiveDuration, 5000)));
+            toast.addEventListener('mouseleave', () => startDismiss(Math.min(effectiveDuration, 1500)));
             root.requestAnimationFrame(() => {
                 toast.style.opacity = '1';
                 toast.style.transform = 'translateX(-50%) translateY(0)';
@@ -153,7 +153,7 @@
         if (debug) root.console?.log?.(debug);
     }
 
-    function toastError(message, debug, duration = 8000) {
+    function toastError(message, debug, duration = 3000) {
         showToast(message, 'error', duration, debug);
         if (debug) root.console?.error?.(debug);
         else root.console?.error?.(`[FastTag Error]: ${message}`);
