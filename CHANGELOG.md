@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-09-24
+
+### Added
+- **Multi-Source Scraper Selection**: Integrated support for all configured Stash-box endpoints (StashDB.org, etc.) and all installed community and custom studio scrapers.
+- **Interactive Scraper Switcher**: Added an interactive scraper picker button to the idle test pattern card, match results HUD, and empty results card, allowing instant switching without losing context.
+- **Compact Searchable Scraper Picker**: Added real-time search filtering in the scraper dropdown with full keyboard navigation (<kbd>Enter</kbd> to pick the first match, <kbd>Esc</kbd> to dismiss).
+- **Scraper Capability Detection**: Automatically categorizes scrapers as title/text search (`⚡`) or URL-only studio scrapers (`🔗` with cyan `[URL]` badges).
+- **Adaptive URL Input & Direct URL Scraping**: When a URL-only scraper is selected, the query input adapts to prompt for direct links; pasting any `http://` or `https://` link automatically routes to Stash's native URL scraper engine.
+- **Pre-Scrape Selection**: Users can now select their desired scraper directly on the idle card before executing manual scrape actions.
+- **Configurable Default Scraper Source**: Added settings picker to select a default scraper (StashDB, specific scraper, or Remember Last Used), with seamless scene-level manual overrides.
+- **Automatic Stash-box Fallback**: Option in Settings to automatically fall back to StashDB when an installed community scraper returns no matches.
+- **Cross-Platform Python Portability**: Self-healing runtime directory resolution for Windows, Docker, and NAS environments, ensuring PID and log paths never fail with `FileNotFoundError`.
+
+
 ## [4.4.9] - 2026-09-11
 
 ### Added
