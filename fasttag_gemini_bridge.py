@@ -41,6 +41,7 @@ def get_runtime_dir():
     return tempfile.gettempdir()
 
 LOG_FILE = os.path.join(get_runtime_dir(), "fasttag_gemini_bridge.log")
+PID_FILE = os.path.join(get_runtime_dir(), "fasttag_gemini_bridge.pid")
 
 def bridge_log(msg):
     try:
@@ -78,12 +79,13 @@ def get_ordered_candidate_models(api_key, requested_model=None):
     ordered = []
 
     priority = [
-        "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.8-flash",
-        "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
-        "gemini-pro-latest", "gemini-2.5-flash-lite"
+        "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash",
+        "gemini-2.5-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash",
+        "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
+        "gemini-pro-latest"
     ]
 
-    if requested_model and not any(bad in requested_model.lower() for bad in ["tts", "audio", "image", "embedding"]):
+    if requested_model and not any(bad in requested_model.lower() for bad in ["tts", "audio", "image", "embedding", "2.0", "1.5", "1.0"]):
         ordered.append(requested_model)
 
     for p in priority:
@@ -99,7 +101,33 @@ def get_ordered_candidate_models(api_key, requested_model=None):
 
     return ordered
 
+SCRIPT_START_MTIME = os.path.getmtime(os.path.abspath(__file__)) if os.path.exists(os.path.abspath(__file__)) else 0
+
+def check_for_script_update():
+    """
+    Hot-reload guard: if the bridge script on disk was modified (e.g. by a plugin update),
+    cleanly removes its PID file and exits so the next request auto-spawns the fresh code.
+    Note: the single in-flight request during reload will drop as the socket closes;
+    FastTag's frontend WebSocket reconnect automatically restarts the bridge within 800ms.
+    """
+    global SCRIPT_START_MTIME
+    try:
+        current_mtime = os.path.getmtime(os.path.abspath(__file__))
+        if SCRIPT_START_MTIME and current_mtime > SCRIPT_START_MTIME:
+            bridge_log("Detected updated fasttag_gemini_bridge.py on disk. Cleaning up PID and exiting for hot reload...")
+            try:
+                if os.path.exists(PID_FILE):
+                    with open(PID_FILE, "r") as pf:
+                        if int(pf.read().strip()) == os.getpid():
+                            os.remove(PID_FILE)
+            except Exception:
+                pass
+            os._exit(0)
+    except Exception:
+        pass
+
 def process_gemini_request(data):
+    check_for_script_update()
     req_type = data.get("type", "parse")
     api_key = data.get("api_key", "").strip()
     req_model = data.get("model", "gemini-flash-latest").strip()
@@ -160,7 +188,7 @@ Extract and return a valid JSON object matching this schema:
         log(f"Attempting model: {chosen_model}...")
         try:
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=5) as resp: # 5s fast timeout
+            with urllib.request.urlopen(req, timeout=12) as resp: # 12s resilient timeout
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 candidates_data = resp_data.get("candidates") or []
                 parts = candidates_data[0].get("content", {}).get("parts", []) if candidates_data else []

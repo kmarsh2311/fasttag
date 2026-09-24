@@ -58,6 +58,10 @@ assert.equal(values.get('fasttag_gemini_api_key'), 'secret-key');
 assert.equal(storage.getGeminiModel(), 'gemini-flash-latest');
 storage.setGeminiModel('gemini-custom');
 assert.equal(values.get('fasttag_gemini_model'), 'gemini-custom');
+values.set('fasttag_gemini_model', 'gemini-2.0-flash');
+assert.equal(storage.getGeminiModel(), 'gemini-flash-latest');
+storage.setGeminiModel('gemini-2.0-flash');
+assert.equal(storage.getGeminiModel(), 'gemini-flash-latest');
 
 values.set('stash_fast_tag_recent_tags', '{invalid json');
 assert.deepEqual(storage.readRecentEntries('tags'), []);

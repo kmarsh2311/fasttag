@@ -845,8 +845,26 @@
         const response = await deps.fetchGQL(config.createQuery, { name: studio.name.trim() });
         const newId = config.createExtract(response?.data);
         if (!newId) return { id: null, failures: [studio.name.trim()] };
+        const createdRecord = {
+            id: String(newId),
+            name: studio.name.trim(),
+            image_path: studio.image || ''
+        };
+        if (cachedEntities && Array.isArray(cachedEntities)) {
+            cachedEntities.push(createdRecord);
+        }
+        if (typeof deps.injectCachedEntity === 'function') {
+            deps.injectCachedEntity('studios', createdRecord, cachedEntities);
+        }
         deps.setCache('studios', null);
-        return { id: String(newId), failures: [] };
+        const result = { id: String(newId), failures: [] };
+        Object.defineProperty(result, 'createdEntity', {
+            value: createdRecord,
+            writable: true,
+            enumerable: false,
+            configurable: true
+        });
+        return result;
     }
 
     async function resolveScrapedStudio(studio, selected) {
@@ -886,8 +904,17 @@
                         performerCreate(input: $input) { id name }
                     }
                 `, { input });
-                const newId = response?.data?.performerCreate?.id || config.createExtract(response?.data);
-                if (newId) return String(newId);
+                const created = response?.data?.performerCreate;
+                const newId = created?.id || config.createExtract(response?.data);
+                if (newId) {
+                    return {
+                        id: String(newId),
+                        name: created?.name || fullInput.name,
+                        disambiguation: item.disambiguation || '',
+                        image_path: item.images?.[0] || '',
+                        gender: item.gender || null
+                    };
+                }
             } catch (error) {
                 console.warn('[FastTag] Performer profile import failed; retrying with fewer fields.', error);
             }
@@ -895,8 +922,15 @@
 
         try {
             const response = await getDependencies().fetchGQL(config.createQuery, { name: fullInput.name });
+            const created = response?.data?.performerCreate;
             const newId = config.createExtract(response?.data);
-            return newId ? String(newId) : null;
+            return newId ? {
+                id: String(newId),
+                name: created?.name || fullInput.name,
+                disambiguation: item.disambiguation || '',
+                image_path: item.images?.[0] || '',
+                gender: item.gender || null
+            } : null;
         } catch (error) {
             return null;
         }
@@ -978,6 +1012,7 @@
         const { cachedEntities, config } = await loadCachedEntities(type);
         const resolvedIds = [];
         const failures = [];
+        const createdEntities = [];
         for (const index of selectedIndices) {
             const item = items[index];
             if (!item || !item.name) continue;
@@ -999,21 +1034,41 @@
                 }
                 continue;
             }
-            let newId = null;
+            let createdRecord = null;
             if (type === 'performers') {
-                newId = await createScrapedPerformer(config, item, sourceInfo || {});
+                const created = await createScrapedPerformer(config, item, sourceInfo || {});
+                if (created) {
+                    createdRecord = typeof created === 'object' ? created : { id: String(created), name: item.name.trim() };
+                }
             } else {
                 const response = await deps.fetchGQL(config.createQuery, { name: item.name.trim() });
-                newId = config.createExtract(response?.data);
+                const newId = config.createExtract(response?.data);
+                if (newId) {
+                    createdRecord = { id: String(newId), name: item.name.trim() };
+                }
             }
-            if (newId) {
-                resolvedIds.push(String(newId));
+            if (createdRecord?.id) {
+                resolvedIds.push(String(createdRecord.id));
+                createdEntities.push(createdRecord);
+                if (cachedEntities && Array.isArray(cachedEntities)) {
+                    cachedEntities.push(createdRecord);
+                }
+                if (typeof deps.injectCachedEntity === 'function') {
+                    deps.injectCachedEntity(type, createdRecord, cachedEntities);
+                }
                 deps.setCache(type, null);
             } else {
                 failures.push(item.name.trim());
             }
         }
-        return { ids: resolvedIds, failures };
+        const result = { ids: resolvedIds, failures };
+        Object.defineProperty(result, 'createdEntities', {
+            value: createdEntities,
+            writable: true,
+            enumerable: false,
+            configurable: true
+        });
+        return result;
     }
 
     async function resolveScrapedEntityIds(type, items, selectedIndices) {

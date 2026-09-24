@@ -51,7 +51,10 @@
                 if (!settled && (!socket || socket.readyState !== root.WebSocket.OPEN)) {
                     if (socket) try { socket.close(); } catch (e) {}
                     try {
-                        await getDependencies().fetchGQL('mutation { runPluginTask(plugin_id: "mypluginrc", task_name: "Start Gemini Bridge") }');
+                        const res = await getDependencies().fetchGQL('mutation { runPluginTask(plugin_id: "fasttag", task_name: "Start Gemini Bridge") }');
+                        if (res?.errors && res.errors.length > 0) {
+                            await getDependencies().fetchGQL('mutation { runPluginTask(plugin_id: "mypluginrc", task_name: "Start Gemini Bridge") }');
+                        }
                         await new Promise(wait => root.setTimeout(wait, 600));
                         const retrySocket = new root.WebSocket(socketUrl);
                         retrySocket.onopen = () => {

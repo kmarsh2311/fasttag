@@ -189,6 +189,89 @@ assert.match(source, /id="fasttag-source-search-input"/, "source dropdown must i
 assert.match(source, /Stash-box Endpoints/, "dropdown menu must categorize Stash-box Endpoints");
 assert.match(source, /Installed Scrapers/, "dropdown menu must categorize Installed Scrapers");
 
+async function testConsoleSearchRetainsFocusOnEmptyResults() {
+    let globalSearchFocused = false;
+    let emptySearchFocused = false;
+    const globalSearchEl = {
+        focus: () => { globalSearchFocused = true; }
+    };
+    const emptySearchInputEl = {
+        focus: () => { emptySearchFocused = true; },
+        addEventListener: () => {}
+    };
+    const testContainer = {
+        innerHTML: '',
+        style: {},
+        contains: (el) => el === emptySearchInputEl,
+        querySelector: (sel) => {
+            if (sel === '#fasttag-scrape-empty-query') return emptySearchInputEl;
+            return { addEventListener: () => {} };
+        }
+    };
+    const testPopup = {
+        currentSceneId: 'scene-empty',
+        element: { isConnected: true },
+        globalSearch: globalSearchEl,
+        scraperCardContainer: testContainer,
+        scrapeBtn: { disabled: false, innerHTML: '', classList: { add: () => {}, remove: () => {} } }
+    };
+
+    controller.configure({
+        getActivePopup: () => testPopup,
+        getEffectiveTheme: () => 'dark',
+        getDetachScraper: () => false,
+        isEasterEggActive: () => false,
+        toastError: () => {},
+        toastSuccess: () => {},
+        escapeHtml: (s) => s || '',
+        cleanTitleForScraping: (s) => s || '',
+        getScraperMatchingSettings: () => ({ initialResultLimit: 5 }),
+        getHideObviousFalsePositives: () => false,
+        partitionObviousFalsePositiveMatches: (r) => ({ visible: r, hidden: [] }),
+        getCachedOrNull: () => []
+    });
+
+    global.document = global.document || {};
+    const origBody = global.document.body;
+    const origActive = global.document.activeElement;
+    global.document.body = { contains: (el) => el === globalSearchEl };
+    global.document.activeElement = null;
+
+    try {
+        await controller.renderMatches(testContainer, [], 'scene-empty', null, testPopup, null);
+        assert.equal(emptySearchFocused, false, 'HUD empty search input should NOT be auto-focused');
+        assert.equal(globalSearchFocused, true, 'Console main search should retain focus');
+    } finally {
+        global.document.body = origBody;
+        global.document.activeElement = origActive;
+    }
+}
+
+async function testLoadingStateDoesNotStealFocus() {
+    let abortInputFocused = false;
+    const abortInputEl = {
+        value: '',
+        focus: () => { abortInputFocused = true; },
+        addEventListener: () => {}
+    };
+    const testPopup = {
+        currentSceneId: 'scene-focus-test',
+        element: { isConnected: true },
+        scraperCardContainer: {
+            innerHTML: '',
+            style: {},
+            querySelector: (sel) => {
+                if (sel === '#fasttag-loading-abort-query') return abortInputEl;
+                return { addEventListener: () => {} };
+            }
+        },
+        scrapeBtn: { disabled: false, innerHTML: '' }
+    };
+    controller.showLoadingState(testPopup, 'Scraping…', () => {});
+    await new Promise(r => setTimeout(r, 120));
+    assert.equal(abortInputFocused, false, 'Loading state must not auto-focus abort input');
+}
+
 async function testTriggerRejectsLateResults() {
     let resolveFetch;
     const lateResult = new Promise(resolve => { resolveFetch = resolve; });
@@ -526,6 +609,242 @@ async function testDetachedCancelButtonKeepsHudOpen() {
     assert.equal(controller.isHudOpen(), true, 'HUD must stay open when clicking Cancel in footer');
 }
 
+async function testNewlyCreatedEntitiesInjectedImmediatelyWithoutReload() {
+    let pageReloadCalled = false;
+    const fakeWindow = { location: { reload: () => { pageReloadCalled = true; } } };
+
+    const selectedPerformers = new Set(['p-existing-1']);
+    const selectedTags = new Set(['t-existing-1']);
+    let selectedStudio = 's-existing-1';
+
+    // Multiple pre-existing performers, tags, and studios in memory
+    const performersTableRows = [
+        { id: 'p-existing-1', name: 'Jose' },
+        { id: 'p-existing-2', name: 'Aaron Roberts' }
+    ];
+    const tagsTableRows = [
+        { id: 't-existing-1', name: 'Existing Tag 1' },
+        { id: 't-existing-2', name: 'Existing Tag 2' }
+    ];
+
+    const makeFakeTable = (rows) => {
+        const selected = new Set();
+        return {
+            initialized: true,
+            getRows: () => rows.map(r => ({ getData: () => r })),
+            getData: () => [...rows],
+            addData: (newRows, top) => {
+                for (const r of newRows) {
+                    if (!rows.some(existing => String(existing.id) === String(r.id))) {
+                        if (top) rows.unshift(r);
+                        else rows.push(r);
+                    }
+                }
+            },
+            setData: async (newRows) => {
+                rows.length = 0;
+                rows.push(...newRows);
+            },
+            selectRow: (id) => { selected.add(String(id)); },
+            getSelectedRows: () => Array.from(selected)
+        };
+    };
+
+    const performersTable = makeFakeTable(performersTableRows);
+    const tagsTable = makeFakeTable(tagsTableRows);
+    const studioBar = {
+        chip: { style: { display: 'none' } },
+        chipName: { textContent: '' }
+    };
+
+    let performerUIRefreshed = false;
+    let tagUIRefreshed = false;
+    let studioUIRefreshed = false;
+    let allUIRefreshed = false;
+
+    // Simulate in-memory cache store with existing items
+    const inMemoryCache = {
+        performers: [{ id: 'p-existing-1', name: 'Jose' }, { id: 'p-existing-2', name: 'Aaron Roberts' }],
+        tags: [{ id: 't-existing-1', name: 'Existing Tag 1' }, { id: 't-existing-2', name: 'Existing Tag 2' }],
+        studios: [{ id: 's-existing-1', name: 'FaKings' }]
+    };
+
+    const context = {
+        selectedPerformerIds: selectedPerformers,
+        selectedTagIds: selectedTags,
+        get selectedStudioId() { return selectedStudio; },
+        set selectedStudioId(v) { selectedStudio = v; },
+        setSelectedPerformers: (s) => {
+            selectedPerformers.clear();
+            s.forEach(id => selectedPerformers.add(String(id)));
+        },
+        setSelectedTags: (s) => {
+            selectedTags.clear();
+            s.forEach(id => selectedTags.add(String(id)));
+        },
+        setSelectedStudio: (s) => { selectedStudio = s; },
+        setInitialPerformers: () => {},
+        setInitialTags: () => {},
+        setInitialStudio: () => {},
+        injectCreatedEntity: (type, entity) => {
+            // Must preserve existing in-memory entities and append/update
+            const list = inMemoryCache[type];
+            if (Array.isArray(list)) {
+                const idx = list.findIndex(e => String(e.id) === String(entity.id));
+                if (idx >= 0) list[idx] = { ...list[idx], ...entity };
+                else list.push(entity);
+            }
+            if (type === 'performers') {
+                selectedPerformers.add(String(entity.id));
+                performersTable.addData([entity], true);
+                performersTable.selectRow(String(entity.id));
+            } else if (type === 'tags') {
+                selectedTags.add(String(entity.id));
+                tagsTable.addData([entity], true);
+                tagsTable.selectRow(String(entity.id));
+            } else if (type === 'studios') {
+                selectedStudio = String(entity.id);
+                studioBar.chipName.textContent = entity.name;
+                studioBar.chip.style.display = 'inline-flex';
+            }
+        },
+        fetchColumnData: async (type, table, query, selIds) => {
+            // Render from in-memory cache
+            if (type === 'performers') {
+                performerUIRefreshed = true;
+                await table.setData([...inMemoryCache.performers]);
+                selIds.forEach(id => table.selectRow(String(id)));
+            } else if (type === 'tags') {
+                tagUIRefreshed = true;
+                await table.setData([...inMemoryCache.tags]);
+                selIds.forEach(id => table.selectRow(String(id)));
+            }
+        },
+        renderStudioBar: async () => {
+            studioUIRefreshed = true;
+            if (selectedStudio) {
+                const s = inMemoryCache.studios.find(item => String(item.id) === String(selectedStudio));
+                if (s) studioBar.chipName.textContent = s.name;
+                studioBar.chip.style.display = 'inline-flex';
+            }
+        },
+        refreshAllUI: () => {
+            allUIRefreshed = true;
+        }
+    };
+
+    const popup = {
+        element: { getAttribute: () => 'everything' },
+        performersTable,
+        tagsTable,
+        studioBar,
+        _context: context
+    };
+
+    const newPerformer = { id: 'p-new-1', name: 'Marlene Strep', disambiguation: '', image_path: 'https://img/ms.jpg' };
+    const newTag = { id: 't-new-1', name: 'Feature Dance' };
+    const newStudio = { id: 's-new-1', name: 'MILF Club' };
+
+    controller.configure({
+        getActivePopup: () => popup,
+        log: () => {},
+        readScrapeFieldSelection: () => ({
+            title: true, studio: true, cover: false, performerIndices: [0], tagIndices: [0]
+        }),
+        resolveScrapedStudioResult: async () => {
+            const res = { id: newStudio.id, failures: [] };
+            Object.defineProperty(res, 'createdEntity', { value: newStudio, enumerable: false });
+            return res;
+        },
+        resolveScrapedEntityIdsResult: async (type) => {
+            if (type === 'performers') {
+                const res = { ids: [newPerformer.id], failures: [] };
+                Object.defineProperty(res, 'createdEntities', { value: [newPerformer], enumerable: false });
+                return res;
+            }
+            const res = { ids: [newTag.id], failures: [] };
+            Object.defineProperty(res, 'createdEntities', { value: [newTag], enumerable: false });
+            return res;
+        },
+        fetchGQL: async (query) => {
+            if (query.includes('FastTagAcceptCurrentScene')) {
+                return { data: { findScene: { id: 'scene-99', performers: [{ id: 'p-existing-1' }], tags: [{ id: 't-existing-1' }], stash_ids: [] } } };
+            }
+            if (query.includes('FastTagStashBoxes')) {
+                return { data: { configuration: { general: { stashBoxes: [] } } } };
+            }
+            if (query.includes('FastTagAcceptSave')) {
+                return { data: { sceneUpdate: { id: 'scene-99', title: 'Scene 99' } } };
+            }
+            return { data: {} };
+        },
+        buildAcceptedSceneStashIds: () => ({ stashIds: [], added: false }),
+        buildScrapeUpdateInput: ({ existingPerformerIds = [], performerIdsToAdd = [], existingTagIds = [], tagIdsToAdd = [], studioIdToSet }) => {
+            const mergedPerformerIds = Array.from(new Set([...existingPerformerIds, ...performerIdsToAdd]));
+            const mergedTagIds = Array.from(new Set([...existingTagIds, ...tagIdsToAdd]));
+            return {
+                updateInput: { id: 'scene-99', performer_ids: mergedPerformerIds, tag_ids: mergedTagIds, studio_id: studioIdToSet },
+                mergedPerformerIds,
+                mergedTagIds
+            };
+        },
+        sceneCardUpdateFields: 'id',
+        syncSceneToApolloCache: () => {},
+        setLiveEverythingPopupTitle: () => {},
+        refreshSceneCards: async () => {},
+        recordSaveUsage: () => {},
+        toastError: (msg) => { throw new Error(msg); },
+        toastSuccess: () => {}
+    });
+
+    const acceptBtn = { style: {}, disabled: false };
+    await controller.acceptMatch({
+        title: 'Scene 99 Match',
+        studio: { name: 'MILF Club' },
+        performers: [{ name: 'Marlene Strep' }],
+        tags: [{ name: 'Feature Dance' }]
+    }, { querySelector: () => acceptBtn }, 'scene-99', context, popup);
+
+    const performerData = performersTable.getData();
+    // 1. New performer appears immediately
+    assert.ok(performerData.some(p => p.id === 'p-new-1' && p.name === 'Marlene Strep'),
+        'newly created performer (Marlene Strep) should appear immediately in performer table');
+    // 2. Previously existing performers remain visible (NOT clobbered!)
+    assert.ok(performerData.some(p => p.id === 'p-existing-1' && p.name === 'Jose'),
+        'previously existing performer (Jose) must remain visible in table');
+    assert.ok(performerData.some(p => p.id === 'p-existing-2' && p.name === 'Aaron Roberts'),
+        'other previously existing performers (Aaron Roberts) must remain visible in table');
+    assert.equal(performerData.length, 3, 'table must contain both existing performers plus the newly created performer');
+    // 3. All selected performers remain selected
+    assert.ok(context.selectedPerformerIds.has('p-new-1'), 'new performer is marked selected');
+    assert.ok(context.selectedPerformerIds.has('p-existing-1'), 'existing performer (Jose) remains selected');
+    assert.ok(performersTable.getSelectedRows().includes('p-new-1'), 'new performer row is selected');
+    assert.ok(performersTable.getSelectedRows().includes('p-existing-1'), 'existing performer (Jose) row is selected');
+    assert.equal(context.selectedPerformerIds.size, 2, 'exactly 2 performers must be selected');
+
+    // 4. Same protection for tags
+    const tagData = tagsTable.getData();
+    assert.ok(tagData.some(t => t.id === 't-new-1' && t.name === 'Feature Dance'),
+        'newly created tag should appear immediately in tag table');
+    assert.ok(tagData.some(t => t.id === 't-existing-1'),
+        'existing tag 1 must remain visible in tag table');
+    assert.ok(tagData.some(t => t.id === 't-existing-2'),
+        'existing tag 2 must remain visible in tag table');
+    assert.equal(tagData.length, 3, 'tag table must preserve existing tags plus the new tag');
+    assert.ok(context.selectedTagIds.has('t-new-1'), 'new tag is selected');
+    assert.ok(context.selectedTagIds.has('t-existing-1'), 'existing tag remains selected');
+
+    // 5. Same protection for studios
+    assert.equal(context.selectedStudioId, 's-new-1', 'new studio is selected');
+    assert.equal(studioBar.chipName.textContent, 'MILF Club', 'new studio is applied');
+    assert.ok(inMemoryCache.studios.some(s => s.id === 's-existing-1'), 'existing studio remains in memory');
+    assert.ok(inMemoryCache.studios.some(s => s.id === 's-new-1'), 'new studio is in memory');
+
+    // 6. No reload needed
+    assert.equal(pageReloadCalled, false, 'no page reload should be required');
+    assert.ok(allUIRefreshed, 'UI was fully refreshed');
+}
+
 testTriggerRejectsLateResults()
     .then(() => testAcceptMatchOrdering())
     .then(() => testToggleHiddenJumpsToFirstNewItem())
@@ -535,6 +854,9 @@ testTriggerRejectsLateResults()
     .then(() => testShowLoadingStateCancelButton())
     .then(() => testShowLoadingStateDetachedHeaderClose())
     .then(() => testDetachedCancelButtonKeepsHudOpen())
+    .then(() => testNewlyCreatedEntitiesInjectedImmediatelyWithoutReload())
+    .then(() => testConsoleSearchRetainsFocusOnEmptyResults())
+    .then(() => testLoadingStateDoesNotStealFocus())
     .then(() => console.log('fasttag-scraper-controller tests passed'))
     .catch(error => {
         console.error(error);

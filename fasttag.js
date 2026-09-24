@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Stash FastTag
 // @namespace    http://tampermonkey.net/
-// @version      4.5.2
+// @version      4.5.3
 // @description  Fast scene tagging workflow for Stash: edit tags, performers, studios, and galleries from scene cards with smart suggestions, bulk tagging, and sequential navigation
 // @match        http://localhost:*/*
 // @match        http://127.0.0.1:*/*
@@ -252,7 +252,13 @@
         getFillMissingPerformerImages,
         getEntityConfig: type => ENTITY_CONFIG[type],
         getCachedOrNull: type => getCachedOrNull(type),
-        setCache: (type, data) => setCache(type, data),
+        setCache: (type, data) => {
+            if (data === null && cacheStore[type] && Array.isArray(cacheStore[type].data) && cacheStore[type].data.length > 0) {
+                return;
+            }
+            setCache(type, data);
+        },
+        injectCachedEntity: (type, entity, list) => injectCachedEntity(type, entity, list),
         getDebugMode: () => getDebugMode(),
         log: (...args) => ftLog(...args)
     });
@@ -269,7 +275,13 @@
         getDetachScraper,
         getEffectiveTheme: () => getEffectiveTheme(),
         getCachedOrNull: type => getCachedOrNull(type),
-        setCache: (type, data) => setCache(type, data),
+        setCache: (type, data) => {
+            if (data === null && cacheStore[type] && Array.isArray(cacheStore[type].data) && cacheStore[type].data.length > 0) {
+                return;
+            }
+            setCache(type, data);
+        },
+        injectCachedEntity: (type, entity, list) => injectCachedEntity(type, entity, list),
         cleanTitleForScraping,
         isEasterEggActive: () => isEasterEggActive(),
         setScraperHudPersistedOpen,
@@ -367,7 +379,7 @@
         mountMomentaryPeekButton
     });
 
-    console.log('[FastTag v4.5.2] Initialized with Targeted Apollo Cache Sync, IndexedDB Cache, and 0ms Scene Card Updates');
+    console.log('[FastTag v4.5.3] Initialized with Targeted Apollo Cache Sync, IndexedDB Cache, and 0ms Scene Card Updates');
 
     let fastTagHelpLoadPromise = null;
     function loadFastTagHelpModule() {
@@ -388,7 +400,7 @@
                 const script = document.createElement('script');
                 script.id = 'fasttag-help-script';
                 const scriptUrl = new URL(assetPaths[index], window.location.origin);
-                scriptUrl.searchParams.set('v', '4.5.2-help-1');
+                scriptUrl.searchParams.set('v', '4.5.3-help-1');
                 script.src = scriptUrl.href;
                 script.async = true;
                 script.onload = () => {
@@ -430,7 +442,7 @@
             const promises = types.map(async (type) => {
                 const item = await idbGet(type);
                 if (item && item.data && Array.isArray(item.data) && (Date.now() - item.timestamp < CACHE_TTL)) {
-                    cacheStore[type] = { data: item.data, timestamp: item.timestamp };
+                    cacheStore[type] = { data: item.data, timestamp: item.timestamp, _countVerifiedAt: 0 };
                 }
             });
             await Promise.all(promises);
@@ -2002,6 +2014,11 @@
             clearDebugLogs,
             resetAllLayoutsToDefault,
             invalidateCache,
+            validateCacheConsistency,
+            fetchEntityCountSafely,
+            ensureCachedEntityList,
+            getCachedOrNull,
+            setCache,
             promptDebugModeWarningDialog,
             loadFastTagHelpModule,
             showToast,
@@ -2024,7 +2041,7 @@
 
     function setCache(type, data) {
         const now = Date.now();
-        cacheStore[type] = { data, timestamp: now };
+        cacheStore[type] = { data, timestamp: now, _countVerifiedAt: now };
         idbSet(type, data, now);
     }
 
@@ -2042,6 +2059,136 @@
             };
             idbDelete(null);
         }
+    }
+
+    const pendingInjectedEntities = {
+        performers: new Map(),
+        tags: new Map(),
+        studios: new Map()
+    };
+
+    function injectCachedEntity(type, entity, existingList = null) {
+        if (!type || !entity || entity.id == null) return entity;
+        const normalizedId = String(entity.id);
+        if (pendingInjectedEntities[type]) {
+            pendingInjectedEntities[type].set(normalizedId, entity);
+        }
+        let item = cacheStore[type];
+        if (item && Array.isArray(item.data) && item.data.length > 0) {
+            const idx = item.data.findIndex(e => String(e?.id) === normalizedId);
+            if (idx >= 0) {
+                item.data[idx] = { ...item.data[idx], ...entity };
+            } else {
+                item.data.push(entity);
+            }
+            item._countVerifiedAt = Date.now();
+            idbSet(type, item.data, item.timestamp || Date.now());
+        } else if (Array.isArray(existingList) && existingList.length > 0) {
+            const list = Array.from(existingList);
+            const idx = list.findIndex(e => String(e?.id) === normalizedId);
+            if (idx >= 0) {
+                list[idx] = { ...list[idx], ...entity };
+            } else {
+                list.push(entity);
+            }
+            const now = Date.now();
+            cacheStore[type] = { data: list, timestamp: now, _countVerifiedAt: now };
+            idbSet(type, list, now);
+        }
+        // Do not initialize cacheStore[type] to a one-item array containing only the new entity.
+        try {
+            addRecentEntry(type, entity);
+        } catch (e) {}
+        return entity;
+    }
+
+    const COUNT_VERIFY_INTERVAL = 60 * 1000; // 60-second throttle for count verification queries
+
+    async function fetchEntityCountSafely(type) {
+        const config = ENTITY_CONFIG[type];
+        if (!config || !config.countQuery) return null;
+        try {
+            const res = await fetchGQL(config.countQuery);
+            let count = config.extractCount?.(res?.data);
+            if (typeof count === 'number' && !isNaN(count)) {
+                return count;
+            }
+            if (res?.errors && res.errors.length > 0 && config.fallbackCountQuery) {
+                const fallbackRes = await fetchGQL(config.fallbackCountQuery);
+                count = config.extractCount?.(fallbackRes?.data);
+                if (typeof count === 'number' && !isNaN(count)) {
+                    return count;
+                }
+            }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function validateCacheConsistency(type) {
+        const item = cacheStore[type];
+        if (!item || !Array.isArray(item.data)) {
+            return false;
+        }
+
+        // Lightweight throttle: avoid repeating count query if recently verified
+        if (item._countVerifiedAt && (Date.now() - item._countVerifiedAt < COUNT_VERIFY_INTERVAL)) {
+            return true;
+        }
+
+        if (item._validatingPromise) {
+            return item._validatingPromise;
+        }
+
+        item._validatingPromise = (async () => {
+            try {
+                const remoteCount = await fetchEntityCountSafely(type);
+                // Fail open on network/GraphQL error: keep cache for offline resilience
+                if (typeof remoteCount !== 'number' || isNaN(remoteCount)) {
+                    return true;
+                }
+
+                const cachedCount = item.data ? item.data.length : 0;
+                if (cachedCount !== remoteCount) {
+                    ftLog('WARN', 'CACHE', `Cache inconsistency detected for ${type}: cached ${cachedCount} item(s), Stash has ${remoteCount}. Invalidating stale/poisoned cache.`, {
+                        type,
+                        cachedCount,
+                        remoteCount
+                    });
+                    invalidateCache(type);
+                    return false;
+                }
+
+                item._countVerifiedAt = Date.now();
+                return true;
+            } catch (e) {
+                return true;
+            } finally {
+                if (cacheStore[type]) {
+                    delete cacheStore[type]._validatingPromise;
+                }
+            }
+        })();
+
+        return item._validatingPromise;
+    }
+
+    async function ensureCachedEntityList(type) {
+        let cached = getCachedOrNull(type);
+        if (cached) {
+            const isConsistent = await validateCacheConsistency(type);
+            if (!isConsistent) {
+                cached = null;
+            }
+        }
+        if (!cached) {
+            cached = await fetchEntityListSafely(type);
+            if (cached && Array.isArray(cached) && cached.length > 0) {
+                setCache(type, cached);
+            }
+        }
+        return cached || null;
     }
 
     const safeModeNotifiedTypes = new Set();
@@ -4471,11 +4618,7 @@
         });
 
         async function fetchData(query, resetScroll = true) {
-            let cachedData = getCachedOrNull(type);
-            if (!cachedData) {
-                cachedData = await fetchEntityListSafely(type);
-                if (cachedData) setCache(type, cachedData);
-            }
+            let cachedData = await ensureCachedEntityList(type);
             if (!cachedData) return;
 
             const term = query.trim().toLowerCase();
@@ -5796,6 +5939,9 @@
             popup._randomUntaggedCount = target.count;
             await loadEditEverythingDataIntoPopup(target.id, null, popup);
             popup._context?.refreshAllUI?.();
+            if (popup?.globalSearch && document.body.contains(popup.globalSearch)) {
+                popup.globalSearch.focus({ preventScroll: true });
+            }
         } catch (error) {
             history.index = previousIndex;
             toastError(`Unable to open random-scene history: ${error?.message || error}`);
@@ -5880,6 +6026,9 @@
         popup._isNavigatingSequential = true;
         try {
             await loadEditEverythingDataIntoPopup(nextSceneId, nextCard, popup);
+            if (popup?.globalSearch && document.body.contains(popup.globalSearch)) {
+                popup.globalSearch.focus({ preventScroll: true });
+            }
         } finally {
             popup._isNavigatingSequential = false;
         }
@@ -6081,6 +6230,9 @@
             popup.globalSearch.value = '';
             popup.globalClear.style.display = 'none';
             if (popup.kbdShortcut) popup.kbdShortcut.style.display = 'block';
+            if (popup.globalSearch && document.body.contains(popup.globalSearch)) {
+                popup.globalSearch.focus({ preventScroll: true });
+            }
 
             const sceneQuery = `
                 query FindSceneEverything($id: ID!) {
@@ -6969,6 +7121,13 @@
                     allStudios = await fetchEntityListSafely('studios');
                     if (allStudios) setCache('studios', allStudios);
                 }
+                if (allStudios && pendingInjectedEntities.studios?.size) {
+                    for (const [id, entity] of pendingInjectedEntities.studios.entries()) {
+                        if (!allStudios.some(item => String(item?.id) === id)) {
+                            allStudios.push(entity);
+                        }
+                    }
+                }
                 if (!allStudios) return;
 
                 if (selectedStudioId) {
@@ -7231,10 +7390,13 @@
 
             async function fetchColumnData(type, tableInstance, query, selIds) {
                 const config = ENTITY_CONFIG[type];
-                let cached = getCachedOrNull(type);
-                if (!cached) {
-                    cached = await fetchEntityListSafely(type);
-                    if (cached) setCache(type, cached);
+                let cached = await ensureCachedEntityList(type);
+                if (cached && pendingInjectedEntities[type]?.size) {
+                    for (const [id, entity] of pendingInjectedEntities[type].entries()) {
+                        if (!cached.some(item => String(item?.id) === id)) {
+                            cached.push(entity);
+                        }
+                    }
                 }
                 if (!cached) return;
 
@@ -8628,8 +8790,46 @@
                     if (popup.globalSearch) popup.globalSearch.focus({ preventScroll: true });
                 };
 
+            const injectCreatedEntity = (type, entity) => {
+                if (!type || !entity || entity.id == null) return entity;
+                const cached = getCachedOrNull(type);
+                injectCachedEntity(type, entity, cached);
+                const idStr = String(entity.id);
+                if (type === 'performers') {
+                    selectedPerformerIds.add(idStr);
+                    if (popup.performersTable?.initialized && typeof popup.performersTable.addData === 'function') {
+                        const rows = typeof popup.performersTable.getRows === 'function' ? popup.performersTable.getRows() : [];
+                        if (!rows.some(r => String(r.getData?.()?.id) === idStr)) {
+                            try { popup.performersTable.addData([entity], true); } catch (e) {}
+                        }
+                        if (typeof popup.performersTable.selectRow === 'function') {
+                            try { popup.performersTable.selectRow(idStr); } catch (e) {}
+                        }
+                    }
+                } else if (type === 'tags') {
+                    selectedTagIds.add(idStr);
+                    if (popup.tagsTable?.initialized && typeof popup.tagsTable.addData === 'function') {
+                        const rows = typeof popup.tagsTable.getRows === 'function' ? popup.tagsTable.getRows() : [];
+                        if (!rows.some(r => String(r.getData?.()?.id) === idStr)) {
+                            try { popup.tagsTable.addData([entity], true); } catch (e) {}
+                        }
+                        if (typeof popup.tagsTable.selectRow === 'function') {
+                            try { popup.tagsTable.selectRow(idStr); } catch (e) {}
+                        }
+                    }
+                } else if (type === 'studios') {
+                    selectedStudioId = idStr;
+                    if (popup.studioBar) {
+                        popup.studioBar.chipName.textContent = entity.name || `Studio #${idStr}`;
+                        popup.studioBar.chip.style.display = 'inline-flex';
+                    }
+                }
+                return entity;
+            };
+
             // Store context methods on popup instance for in-place sequential updates & scraper matches
             popup._context = {
+                injectCreatedEntity,
                 setCurrentSceneId: (id) => { currentSceneId = id; },
                 setSelectedTags: (s) => {
                     selectedTagIds.clear();
@@ -9040,6 +9240,13 @@
                     allStudios = await fetchEntityListSafely('studios');
                     if (allStudios) setCache('studios', allStudios);
                 }
+                if (allStudios && pendingInjectedEntities.studios?.size) {
+                    for (const [id, entity] of pendingInjectedEntities.studios.entries()) {
+                        if (!allStudios.some(item => String(item?.id) === id)) {
+                            allStudios.push(entity);
+                        }
+                    }
+                }
                 if (!allStudios) return;
 
                 if (selectedStudioId) {
@@ -9269,10 +9476,13 @@
 
             async function fetchColumnData(type, tableInstance, query, selIds) {
                 const config = ENTITY_CONFIG[type];
-                let cached = getCachedOrNull(type);
-                if (!cached) {
-                    cached = await fetchEntityListSafely(type);
-                    if (cached) setCache(type, cached);
+                let cached = await ensureCachedEntityList(type);
+                if (cached && pendingInjectedEntities[type]?.size) {
+                    for (const [id, entity] of pendingInjectedEntities[type].entries()) {
+                        if (!cached.some(item => String(item?.id) === id)) {
+                            cached.push(entity);
+                        }
+                    }
                 }
                 if (!cached) return;
 
@@ -10787,11 +10997,7 @@
         };
 
         async function fetchData(query, resetScroll = true) {
-            let cachedData = getCachedOrNull(type);
-            if (!cachedData) {
-                cachedData = await fetchEntityListSafely(type);
-                if (cachedData) setCache(type, cachedData);
-            }
+            let cachedData = await ensureCachedEntityList(type);
             if (!cachedData) return;
 
             const term = query.trim().toLowerCase();
@@ -11411,14 +11617,9 @@
         await prewarmCacheFromIDB();
         const types = ['tags', 'performers', 'studios', 'groups', 'galleries'];
         for (const type of types) {
-            if (!getCachedOrNull(type)) {
-                try {
-                    const data = await fetchEntityListSafely(type);
-                    if (Array.isArray(data) && data.length > 0) {
-                        setCache(type, data);
-                    }
-                } catch (e) {}
-            }
+            try {
+                await ensureCachedEntityList(type);
+            } catch (e) {}
         }
     }
     // Prewarm from IndexedDB immediately on script execution, then run background checks after 300ms

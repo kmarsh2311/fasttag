@@ -646,8 +646,7 @@
                 abortInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); doAbortSearch(); }
                 });
-                // Auto-focus after a small delay so it doesn't interfere with initial render
-                root.setTimeout(() => { try { abortInput.focus(); } catch (_) {} }, 80);
+
             }
             if (abortBtn) {
                 abortBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); doAbortSearch(); });
@@ -1307,7 +1306,14 @@
             if (isDetached && floatingScraperHudElement) attachResizeHandles(floatingScraperHudElement);
             const emptySourceBtn = targetContainer.querySelector("#fasttag-scrape-empty-source-btn");
             if (emptySourceBtn) attachSourceDropdown(emptySourceBtn, popup, sceneId, handleSourceChange);
-            setTimeout(() => emptySearchInput?.focus({ preventScroll: true }), 0);
+            const activeEl = root.document?.activeElement;
+            const isUserInScraperInput = targetContainer && typeof targetContainer.contains === "function" && targetContainer.contains(activeEl) && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
+            if (!isUserInScraperInput) {
+                const mainSearch = popup?.globalSearch || popup?.searchInput || popup?.element?.querySelector?.("#everything-global-search, input[type=\"text\"], input[type=\"search\"]");
+                if (mainSearch && root.document?.body?.contains(mainSearch)) {
+                    mainSearch.focus({ preventScroll: true });
+                }
+            }
             return;
         }
 
@@ -2164,6 +2170,14 @@
         };
 
         updateCardView();
+        const activeEl = root.document?.activeElement;
+        const isUserInScraperInput = targetContainer && typeof targetContainer.contains === "function" && targetContainer.contains(activeEl) && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
+        if (!isUserInScraperInput) {
+            const mainSearch = popup?.globalSearch || popup?.searchInput || popup?.element?.querySelector?.("#everything-global-search, input[type=\"text\"], input[type=\"search\"]");
+            if (mainSearch && root.document?.body?.contains(mainSearch)) {
+                mainSearch.focus({ preventScroll: true });
+            }
+        }
     }
 
 
@@ -2351,6 +2365,57 @@
                 }
                 if (typeof effectiveCtx.setInitialTags === 'function') {
                     effectiveCtx.setInitialTags(new Set(mergedTagIds));
+                }
+
+                // Inject newly created entities directly into active popup UI state
+                const createdStudio = studioResolution?.createdEntity;
+                const createdPerformers = performerResolution?.createdEntities || [];
+                const createdTags = tagResolution?.createdEntities || [];
+
+                if (createdStudio) {
+                    if (typeof effectiveCtx.injectCreatedEntity === 'function') {
+                        effectiveCtx.injectCreatedEntity('studios', createdStudio);
+                    } else if (typeof dependencies.injectCachedEntity === 'function') {
+                        dependencies.injectCachedEntity('studios', createdStudio);
+                    }
+                    if (popup?.studioBar?.chipName) {
+                        popup.studioBar.chipName.textContent = createdStudio.name;
+                        if (popup.studioBar.chip) popup.studioBar.chip.style.display = 'inline-flex';
+                    }
+                }
+
+                for (const p of createdPerformers) {
+                    if (typeof effectiveCtx.injectCreatedEntity === 'function') {
+                        effectiveCtx.injectCreatedEntity('performers', p);
+                    } else if (typeof dependencies.injectCachedEntity === 'function') {
+                        dependencies.injectCachedEntity('performers', p);
+                    }
+                    if (popup?.performersTable && typeof popup.performersTable.addData === 'function') {
+                        const rows = typeof popup.performersTable.getRows === 'function' ? popup.performersTable.getRows() : [];
+                        if (!rows.some(r => String(r.getData?.()?.id) === String(p.id))) {
+                            try { popup.performersTable.addData([p], true); } catch (e) {}
+                        }
+                        if (typeof popup.performersTable.selectRow === 'function') {
+                            try { popup.performersTable.selectRow(String(p.id)); } catch (e) {}
+                        }
+                    }
+                }
+
+                for (const t of createdTags) {
+                    if (typeof effectiveCtx.injectCreatedEntity === 'function') {
+                        effectiveCtx.injectCreatedEntity('tags', t);
+                    } else if (typeof dependencies.injectCachedEntity === 'function') {
+                        dependencies.injectCachedEntity('tags', t);
+                    }
+                    if (popup?.tagsTable && typeof popup.tagsTable.addData === 'function') {
+                        const rows = typeof popup.tagsTable.getRows === 'function' ? popup.tagsTable.getRows() : [];
+                        if (!rows.some(r => String(r.getData?.()?.id) === String(t.id))) {
+                            try { popup.tagsTable.addData([t], true); } catch (e) {}
+                        }
+                        if (typeof popup.tagsTable.selectRow === 'function') {
+                            try { popup.tagsTable.selectRow(String(t.id)); } catch (e) {}
+                        }
+                    }
                 }
 
                 if (typeof effectiveCtx.fetchColumnData === 'function' && popup) {

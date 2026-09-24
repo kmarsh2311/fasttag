@@ -41,4 +41,15 @@ assert.deepEqual(entities.studios.extractList({ findStudios: { studios: [
     { id: '4', name: 'Child', parent_studio: { name: 'Parent' }, scene_count: 0 }
 ] } }), [{ id: '4', name: 'Child', parent_name: 'Parent', scene_count: 0, created_at: '', updated_at: '' }]);
 
+for (const [name, config] of Object.entries(entities)) {
+    assert.ok(config.countQuery, name + " should define countQuery");
+    assert.equal(typeof config.extractCount, "function", name + " should define extractCount");
+}
+assert.equal(entities.tags.extractCount({ findTags: { count: 3 } }), 3);
+assert.equal(entities.performers.extractCount({ findPerformers: { count: 1 } }), 1);
+assert.equal(entities.studios.extractCount({ findStudios: { count: 0 } }), 0);
+assert.equal(entities.galleries.extractCount({ findGalleries: { count: 4 } }), 4);
+assert.equal(entities.groups.extractCount({ findGroups: { count: 2 } }), 2);
+assert.equal(entities.groups.extractCount({ findMovies: { count: 2 } }), 2);
+
 console.log('fasttag-entities tests passed');

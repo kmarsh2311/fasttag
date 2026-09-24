@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.5.3] - 2026-09-24
+
+### Fixed
+- **Console Search Focus Priority**: Prevented scraper HUD (loading state and empty match view) from stealing keyboard focus during sequential navigation, ensuring immediate typing into tag and performer search fields.
+- **Cross-Platform Bridge PID Lifecycle Safety**: Hardened Gemini bridge process ownership verification across macOS, Linux/Docker, and Windows; automatically removes stale PID files without killing unrelated reused processes; ensures clean PID cleanup on hot-reload.
+- **Gemini Model Deprecation Migration**: Automatically migrated deprecated `gemini-2.0` model configs to `gemini-2.5-flash` with resilient timeout and failover prioritization.
+- **Newly Scraped Entity Immediate Injection**: Newly created studios, performers, and tags from scrapers are instantly injected into the active popup UI and cache without requiring a page reload.
+
 ## [4.5.2] - 2026-09-24
 
 ### Changed

@@ -91,8 +91,19 @@
 
     function getGeminiApiKey() { return root.localStorage.getItem(KEYS.geminiApiKey) || ''; }
     function setGeminiApiKey(value) { root.localStorage.setItem(KEYS.geminiApiKey, (value || '').trim()); }
-    function getGeminiModel() { return root.localStorage.getItem(KEYS.geminiModel) || 'gemini-flash-latest'; }
-    function setGeminiModel(value) { root.localStorage.setItem(KEYS.geminiModel, value || 'gemini-flash-latest'); }
+    function getGeminiModel() {
+        const raw = root.localStorage.getItem(KEYS.geminiModel);
+        if (!raw || raw.includes('2.0') || raw.includes('1.5') || raw.includes('1.0')) {
+            return 'gemini-flash-latest';
+        }
+        return raw;
+    }
+    function setGeminiModel(value) {
+        const normalized = (!value || value.includes('2.0') || value.includes('1.5') || value.includes('1.0'))
+            ? 'gemini-flash-latest'
+            : value;
+        root.localStorage.setItem(KEYS.geminiModel, normalized);
+    }
     function getGeminiAutoParse() { return readBoolean(KEYS.geminiAutoParse, true); }
     function setGeminiAutoParse(enabled) { writeBoolean(KEYS.geminiAutoParse, enabled); }
     function getGeminiSuggestions() { return readBoolean(KEYS.geminiSuggestions, true); }
