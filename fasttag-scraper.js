@@ -1022,7 +1022,7 @@
 
     async function fetchScraperMatchesForScene(sceneId, cardElement, manualQuery = '', shouldContinue = null, explicitSource = null) {
         const scraperDependencies = getDependencies();
-        const { fetchGQL } = scraperDependencies;
+        const { fetchGQL, cleanTitleForScraping } = scraperDependencies;
         const startedAt = Date.now();
         let attemptCount = 0;
         const isStillCurrent = () => typeof shouldContinue !== 'function' || shouldContinue() !== false;
@@ -1182,13 +1182,20 @@
             || primaryQueries[0]
             || "";
         const opaqueQueries = shouldSkipCrypticFilename ? [] : buildOpaqueRecoveryFallbackQueries(primaryQueries);
+
+        const cleanTitleCandidates = sceneTitle ? [cleanTitleForScraping(sceneTitle)] : [];
+        const cleanFileNameCandidates = [effectiveFileName, cardText].map(cleanTitleForScraping).filter(Boolean);
+        const studioAllPerformersQuery = contextualSearchQuery || (studioPerformerQueries.length > 0 ? studioPerformerQueries[0] : "");
+        const studioSinglePerformerQueries = studioPerformerQueries.filter(q => q !== studioAllPerformersQuery);
+
         let candidateQueries = cleanedManualQuery
             ? primaryQueries
             : Array.from(new Set([
-                ...primaryQueries,
+                ...cleanTitleCandidates,
+                studioAllPerformersQuery,
+                ...cleanFileNameCandidates,
                 ...opaqueQueries,
-                ...studioPerformerQueries,
-                contextualSearchQuery,
+                ...studioSinglePerformerQueries,
                 ...buildLinkedPerformerFallbackQueries(linkedPerformers, primaryQueries)
             ].filter(Boolean)));
         candidateQueries = Array.from(new Set(candidateQueries.map(dedupeScrapeQueryWords).filter(Boolean)));
@@ -1238,57 +1245,72 @@
             }
 
             let weakBoxMatches = [];
-            for (const queryTerm of candidateQueries) {
+            for (let i = 0; i < candidateQueries.length; i += 2) {
                 if (!isStillCurrent()) return { superseded: true };
-                if (!queryTerm || queryTerm.length < 2) continue;
-                const attemptStartedAt = Date.now();
-                attemptCount += 1;
-                try {
-                    const response = await fetchGQL(SCRAPE_QUERY, {
-                        source: { stash_box_index: boxSource.index },
-                        input: { query: queryTerm }
-                    });
-                    const matches = response?.data?.scrapeSingleScene;
-                    if (Array.isArray(matches) && matches.length > 0) {
-                        const enriched = enrich(matches, "title", boxSource.name, boxSource);
-                        enriched.forEach(match => {
-                            match._matchedSearchQuery = queryTerm;
-                            match._searchQuery = editableSearchQuery || queryTerm;
+                const batch = candidateQueries.slice(i, i + 2).filter(q => q && q.length >= 2);
+                if (batch.length === 0) continue;
+
+                const batchPromises = batch.map(async (queryTerm) => {
+                    const attemptStartedAt = Date.now();
+                    attemptCount += 1;
+                    try {
+                        const response = await fetchGQL(SCRAPE_QUERY, {
+                            source: { stash_box_index: boxSource.index },
+                            input: { query: queryTerm }
                         });
-                        const combined = mergeScraperMatchResults(weakBoxMatches, enriched);
-                        const decisive = hasDecisiveScraperMatch(enriched);
+                        const matches = response?.data?.scrapeSingleScene;
+                        const isMatches = Array.isArray(matches) && matches.length > 0;
+                        let enriched = [];
+                        let decisive = false;
+                        if (isMatches) {
+                            enriched = enrich(matches, "title", boxSource.name, boxSource);
+                            enriched.forEach(match => {
+                                match._matchedSearchQuery = queryTerm;
+                                match._searchQuery = editableSearchQuery || queryTerm;
+                            });
+                            decisive = hasDecisiveScraperMatch(enriched);
+                        }
                         debugTiming("Scraper query completed", {
                             attempt: attemptCount,
                             durationMs: Date.now() - attemptStartedAt,
                             source: boxSource.name,
                             query: queryTerm,
-                            resultCount: enriched.length,
+                            resultCount: isMatches ? enriched.length : 0,
+                            errorCount: Array.isArray(response?.errors) ? response.errors.length : 0,
                             decisive
                         });
-                        if (!isStillCurrent()) return { superseded: true };
-                        if (decisive) return { matches: combined, decisive: true, outcome: "decisive-fallback-match", decisiveQuery: queryTerm };
-                        weakBoxMatches = combined;
-                    } else {
-                        debugTiming("Scraper query completed", {
+                        return { queryTerm, matches: enriched, decisive };
+                    } catch (error) {
+                        console.log("[FastTag] Scrape query error:", error);
+                        debugTiming("Scraper query failed", {
                             attempt: attemptCount,
                             durationMs: Date.now() - attemptStartedAt,
                             source: boxSource.name,
                             query: queryTerm,
-                            resultCount: 0,
-                            errorCount: Array.isArray(response?.errors) ? response.errors.length : 0,
-                            decisive: false
+                            error: String(error?.message || error)
                         });
-                        if (!isStillCurrent()) return { superseded: true };
+                        return { queryTerm, matches: [], decisive: false };
                     }
-                } catch (error) {
-                    console.log("[FastTag] Scrape query error:", error);
-                    debugTiming("Scraper query failed", {
-                        attempt: attemptCount,
-                        durationMs: Date.now() - attemptStartedAt,
-                        source: boxSource.name,
-                        query: queryTerm,
-                        error: String(error?.message || error)
-                    });
+                });
+
+                const settled = await Promise.allSettled(batchPromises);
+                if (!isStillCurrent()) return { superseded: true };
+
+                let batchDecisive = null;
+                for (const res of settled) {
+                    if (res.status === "fulfilled") {
+                        const { queryTerm, matches, decisive } = res.value;
+                        if (matches && matches.length > 0) {
+                            weakBoxMatches = mergeScraperMatchResults(weakBoxMatches, matches);
+                            if (decisive && !batchDecisive) {
+                                batchDecisive = { decisiveQuery: queryTerm };
+                            }
+                        }
+                    }
+                }
+
+                if (batchDecisive) {
+                    return { matches: weakBoxMatches, decisive: true, outcome: "decisive-fallback-match", decisiveQuery: batchDecisive.decisiveQuery };
                 }
             }
             if (weakBoxMatches.length > 0) return { matches: weakBoxMatches, decisive: false, outcome: "weak-fallback-matches" };
@@ -1381,7 +1403,7 @@
                 }
             }
 
-            // 3. Fallback: Search candidate queries by name/title
+            // 3. Fallback: Search candidate queries by name/title (strictly sequential to protect public websites from anti-bot triggers)
             for (const queryTerm of candidateQueries) {
                 if (!isStillCurrent()) return { superseded: true };
                 if (!queryTerm || queryTerm.length < 2) continue;

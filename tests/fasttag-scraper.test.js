@@ -1110,9 +1110,202 @@ async function testAutomatedCandidateQueriesCapped() {
     assert.ok(executedQueries.length <= 4, "automated candidate queries should be capped at 4 to prevent slow sequential cascades, got: " + executedQueries.length);
 }
 
+async function testCandidateQueryBatchingAndEarlyExit() {
+    let currentConcurrent = 0;
+    let maxConcurrent = 0;
+    const executedQueries = [];
+
+    scraper.configure({
+        cleanTitleForScraping,
+        parseDurationSec,
+        fetchGQL: async (query, vars) => {
+            if (query.includes("findScene")) {
+                return {
+                    data: {
+                        findScene: {
+                            title: "Batch Test Scene",
+                            studio: { id: "10", name: "Studio Ten" },
+                            performers: [
+                                { id: "1", name: "Alpha", alias_list: [] },
+                                { id: "2", name: "Beta", alias_list: [] }
+                            ],
+                            files: [{ path: "/videos/batch_scene.mp4", duration: 1200, fingerprints: [] }]
+                        }
+                    }
+                };
+            }
+            if (query.includes("scrapeSingleScene")) {
+                if (vars?.input?.scene_id) {
+                    return { data: { scrapeSingleScene: [] } };
+                }
+                const term = vars?.input?.query;
+                if (term) {
+                    currentConcurrent += 1;
+                    maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+                    executedQueries.push(term);
+                    await new Promise(r => setTimeout(r, 20));
+                    currentConcurrent -= 1;
+                    if (term === "batch test scene") {
+                        return {
+                            data: {
+                                scrapeSingleScene: [{
+                                    title: "Batch Test Scene",
+                                    remote_site_id: "match-decisive",
+                                    studio: { name: "Studio Ten" },
+                                    performers: [{ name: "Alpha" }, { name: "Beta" }],
+                                    duration: 1200
+                                }]
+                            }
+                        };
+                    }
+                    return { data: { scrapeSingleScene: [] } };
+                }
+            }
+            if (query.includes("FastTagScraperSources")) {
+                return {
+                    data: {
+                        configuration: {
+                            general: {
+                                stashBoxes: [{ name: "StashDB", endpoint: "https://stashdb.org/graphql" }]
+                            }
+                        }
+                    }
+                };
+            }
+            if (query.includes("FastTagInstalledScrapers")) {
+                return { data: { listScrapers: [] } };
+            }
+            return { data: {} };
+        }
+    });
+
+    const matches = await scraper.fetchScraperMatchesForScene("scene-batch", null, "", () => true, "stashbox_0");
+
+    assert.ok(matches.length > 0, "should find decisive match from batch 1");
+    assert.equal(maxConcurrent, 2, "candidate queries must run with concurrency limit of 2");
+    assert.equal(executedQueries.length, 2, "must exit early after batch 1 when decisive match is found, without running batch 2");
+
+    // Test Promise.allSettled error isolation
+    currentConcurrent = 0;
+    maxConcurrent = 0;
+    scraper.configure({
+        cleanTitleForScraping,
+        parseDurationSec,
+        fetchGQL: async (query, vars) => {
+            if (query.includes("findScene")) {
+                return {
+                    data: {
+                        findScene: {
+                            title: "Error Scene",
+                            studio: { id: "10", name: "Studio Ten" },
+                            performers: [{ id: "1", name: "Solo", alias_list: [] }],
+                            files: [{ path: "/videos/error_scene.mp4", duration: 1200, fingerprints: [] }]
+                        }
+                    }
+                };
+            }
+            if (query.includes("scrapeSingleScene")) {
+                if (vars?.input?.scene_id) return { data: { scrapeSingleScene: [] } };
+                const term = vars?.input?.query;
+                if (term) {
+                    currentConcurrent += 1;
+                    maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+                    await new Promise(r => setTimeout(r, 15));
+                    currentConcurrent -= 1;
+                    if (term === "error scene") {
+                        throw new Error("Simulated network failure on query 1");
+                    }
+                    return {
+                        data: {
+                            scrapeSingleScene: [{
+                                title: "Error Scene Secondary Match",
+                                remote_site_id: "match-resilient"
+                            }]
+                        }
+                    };
+                }
+            }
+            if (query.includes("FastTagScraperSources")) {
+                return { data: { configuration: { general: { stashBoxes: [{ name: "StashDB", endpoint: "https://stashdb.org/graphql" }] } } } };
+            }
+            if (query.includes("FastTagInstalledScrapers")) return { data: { listScrapers: [] } };
+            return { data: {} };
+        }
+    });
+
+    const resilientMatches = await scraper.fetchScraperMatchesForScene("scene-error", null, "", () => true, "stashbox_0");
+    assert.ok(resilientMatches.length > 0, "batch should succeed using Promise.allSettled even when one query in the batch throws");
+    assert.equal(resilientMatches[0].title, "Error Scene Secondary Match");
+}
+
+async function testInstalledScraperRemainsSequential() {
+    let currentConcurrent = 0;
+    let maxConcurrent = 0;
+    const executedQueries = [];
+
+    scraper.configure({
+        cleanTitleForScraping,
+        parseDurationSec,
+        fetchGQL: async (query, vars) => {
+            if (query.includes("findScene")) {
+                return {
+                    data: {
+                        findScene: {
+                            title: "Community Scraper Scene",
+                            studio: { id: "20", name: "Studio Community" },
+                            performers: [
+                                { id: "1", name: "Performer One", alias_list: [] }
+                            ],
+                            files: [{ path: "/videos/community_scene_alt.mp4", duration: 1500, fingerprints: [] }]
+                        }
+                    }
+                };
+            }
+            if (query.includes("scrapeSingleScene")) {
+                const term = vars?.input?.query;
+                if (term) {
+                    currentConcurrent += 1;
+                    maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+                    executedQueries.push(term);
+                    await new Promise(r => setTimeout(r, 20));
+                    currentConcurrent -= 1;
+                    return { data: { scrapeSingleScene: [] } };
+                }
+            }
+            if (query.includes("FastTagScraperSources")) {
+                return {
+                    data: {
+                        configuration: {
+                            general: {
+                                stashBoxes: [{ name: "StashDB", endpoint: "https://stashdb.org/graphql" }]
+                            }
+                        }
+                    }
+                };
+            }
+            if (query.includes("FastTagInstalledScrapers")) {
+                return {
+                    data: {
+                        listScrapers: [{ id: "community_scraper", name: "Community Scraper" }]
+                    }
+                };
+            }
+            return { data: {} };
+        }
+    });
+
+    const targetSource = { type: "scraper", scraperId: "community_scraper", name: "Community Scraper" };
+    await scraper.fetchScraperMatchesForScene("scene-comm", null, "", () => true, targetSource);
+
+    assert.ok(executedQueries.length >= 2, "community scraper should have executed multiple candidate queries, got: " + executedQueries.length);
+    assert.equal(maxConcurrent, 1, "community scraper candidate queries must remain strictly sequential (maxConcurrent === 1) to protect against anti-bot and rate-limiting");
+}
+
 Promise.resolve()
     .then(testSkipCrypticFilenamesOnTPDB)
     .then(testAutomatedCandidateQueriesCapped)
+    .then(testCandidateQueryBatchingAndEarlyExit)
+    .then(testInstalledScraperRemainsSequential)
     .then(testHashMatch)
     .then(testSingleSourceNoAutoLoopAndTargetedScraping)
     .then(testStashBoxFallbackWhenEnabled)
