@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.5.1] - 2026-09-24
+
+### Added
+- **Loading State Cancel Buttons**: Added a dedicated `Cancel` button alongside `Search` in the loading footer, plus a `✕` close button in the floating HUD header.
+- **HUD Preservation on Cancel**: Clicking `Cancel` aborts the background scrape and transitions directly to the manual search view inside the HUD without closing or dismissing the window.
+
+### Fixed
+- **Scraper Search Performance**: Capped automated candidate queries to high-probability queries and pruned redundant single-name performer queries to prevent 30-60s multi-query network cascades when fingerprint lookup misses.
+- **Skip Cryptic Filenames Setting**: Fixed backward-compatibility normalization so enabling the setting works on all scrapers without legacy key conflicts.
+- **Scraper Switching Controls**: When switching scrapers via the picker, the loading state now properly displays the manual search input and Cancel button.
+
 ## [4.5.0] - 2026-09-24
 
 ### Added

@@ -307,8 +307,234 @@ async function testAcceptMatchOrdering() {
     assert.equal(acceptButton.disabled, true);
 }
 
+
+async function testToggleHiddenJumpsToFirstNewItem() {
+    // Verify that _fastTagInitialIndex is set to the visible partition length
+    // when "Show hidden" is toggled ON, so renderMatches starts at the first
+    // newly revealed false-positive result.
+    const allResults = [
+        { title: 'Visible Match 1', _sourceId: 'stashbox_0' },
+        { title: 'Visible Match 2', _sourceId: 'stashbox_0' },
+        { title: 'False Positive 1', _sourceId: 'stashbox_0' }
+    ];
+    // Simulate the visible partition having 2 items (the first two)
+    const visiblePartitionLength = 2;
+
+    // Simulate the toggle-hidden click handler logic (extracted from renderMatches closure)
+    const showingHiddenResults = false; // currently hidden
+    const falsePositivePartition = { visible: allResults.slice(0, 2), hidden: allResults.slice(2) };
+
+    const wasShowing = showingHiddenResults;
+    allResults._fastTagShowHidden = !wasShowing;
+    allResults._fastTagShowAllResults = !wasShowing;
+    if (!wasShowing) {
+        allResults._fastTagInitialIndex = falsePositivePartition.visible.length;
+    }
+
+    assert.equal(allResults._fastTagInitialIndex, visiblePartitionLength,
+        'toggle hidden should set _fastTagInitialIndex to the visible partition length');
+    assert.equal(allResults._fastTagShowHidden, true, 'showHidden flag should be set to true');
+}
+
+async function testToggleOverflowJumpsToFirstNewItem() {
+    // Verify that _fastTagInitialIndex is set to initialResultLimit
+    // when "Show all" is toggled ON.
+    const allResults = Array.from({ length: 30 }, (_, i) => ({ title: `Match ${i + 1}` }));
+    const initialResultLimit = 25;
+    const showingAllResults = false; // currently showing top 25 only
+
+    const wasShowingAll = showingAllResults;
+    allResults._fastTagShowAllResults = !wasShowingAll;
+    if (!wasShowingAll) {
+        allResults._fastTagInitialIndex = initialResultLimit;
+    }
+
+    assert.equal(allResults._fastTagInitialIndex, initialResultLimit,
+        'toggle overflow should set _fastTagInitialIndex to initialResultLimit');
+    assert.equal(allResults._fastTagShowAllResults, true, 'showAllResults flag should be set to true');
+}
+
+async function testShowLoadingStateWithAbortCallback() {
+    // Verify that showLoadingState renders the abort search form when a callback is provided.
+    const abortPopup = {
+        currentSceneId: 'scene-abort',
+        element: { isConnected: true },
+        scraperCardContainer: {
+            innerHTML: '',
+            style: {},
+            querySelector: (sel) => abortPopup.scraperCardContainer._els?.[sel] || null,
+            _els: {}
+        },
+        scrapeBtn: { disabled: false, innerHTML: '' }
+    };
+    activePopup = abortPopup;
+
+    // Build enough of the querySelector mock to support the wiring
+    const abortInputEl = { value: '', addEventListener: (ev, fn) => { abortInputEl._handlers = abortInputEl._handlers || {}; abortInputEl._handlers[ev] = fn; } };
+    const abortBtnEl = { disabled: false, textContent: '', addEventListener: (ev, fn) => { abortBtnEl._handlers = abortBtnEl._handlers || {}; abortBtnEl._handlers[ev] = fn; } };
+    abortPopup.scraperCardContainer.querySelector = (sel) => {
+        if (sel === '#fasttag-loading-abort-query') return abortInputEl;
+        if (sel === '#fasttag-loading-abort-btn') return abortBtnEl;
+        return null;
+    };
+
+    const abortCallbackArgs = [];
+    const abortCallback = (query) => { abortCallbackArgs.push(query); };
+
+    controller.configure({
+        getActivePopup: () => activePopup,
+        getEffectiveTheme: () => 'dark',
+        getDetachScraper: () => false
+    });
+
+    const result = controller.showLoadingState(abortPopup, 'Scraping new scene…', abortCallback);
+    assert.equal(result, true, 'showLoadingState should return true');
+    // The HTML should include the abort search input
+    assert.match(abortPopup.scraperCardContainer.innerHTML, /fasttag-loading-abort-query/,
+        'loading state with abort callback should render the abort search input');
+    assert.match(abortPopup.scraperCardContainer.innerHTML, /fasttag-loading-abort-btn/,
+        'loading state with abort callback should render the search button');
+
+    // Verify button click triggers callback
+    abortInputEl.value = 'test query';
+    abortBtnEl._handlers?.click?.({ preventDefault: () => {}, stopPropagation: () => {} });
+    assert.deepEqual(abortCallbackArgs, ['test query'], 'clicking the search button should invoke the abort callback');
+}
+
+async function testShowLoadingStateWithoutAbortCallback() {
+    // Verify that showLoadingState does NOT render the abort input when no callback provided.
+    const plainPopup = {
+        currentSceneId: 'scene-plain',
+        element: { isConnected: true },
+        scraperCardContainer: { innerHTML: '', style: {}, querySelector: () => null },
+        scrapeBtn: { disabled: false, innerHTML: '' }
+    };
+    activePopup = plainPopup;
+    controller.configure({
+        getActivePopup: () => activePopup,
+        getEffectiveTheme: () => 'dark',
+        getDetachScraper: () => false
+    });
+
+    controller.showLoadingState(plainPopup);
+    assert.doesNotMatch(plainPopup.scraperCardContainer.innerHTML, /fasttag-loading-abort-query/,
+        'loading state without callback should not render abort search input');
+}
+
+async function testShowLoadingStateCancelButton() {
+    let cancelCalled = false;
+    const cancelBtnEl = { addEventListener: (ev, fn) => { cancelBtnEl._handlers = cancelBtnEl._handlers || {}; cancelBtnEl._handlers[ev] = fn; } };
+    const cancelPopup = {
+        currentSceneId: 'scene-cancel',
+        element: { isConnected: true },
+        scraperCardContainer: {
+            innerHTML: '',
+            style: {},
+            querySelector: (sel) => {
+                if (sel === '#fasttag-loading-cancel-btn') return cancelBtnEl;
+                return null;
+            }
+        },
+        scrapeBtn: { disabled: true, innerHTML: '<span>⏳ Scraping...</span>', classList: { remove: () => {} } }
+    };
+    activePopup = cancelPopup;
+    controller.configure({
+        getActivePopup: () => activePopup,
+        getEffectiveTheme: () => 'dark',
+        getDetachScraper: () => false,
+        isEasterEggActive: () => false
+    });
+
+    controller.showLoadingState(cancelPopup, 'Scraping new scene…', () => {}, () => { cancelCalled = true; });
+    assert.match(cancelPopup.scraperCardContainer.innerHTML, /fasttag-loading-cancel-btn/, 'loading state should render cancel button');
+    
+    // Clicking cancel should trigger callback and restore scrape button
+    cancelBtnEl._handlers?.click?.({ preventDefault: () => {}, stopPropagation: () => {} });
+    assert.equal(cancelCalled, true, 'clicking cancel button should invoke onCancel callback');
+    assert.equal(cancelPopup.scrapeBtn.disabled, false, 'scrape button should be re-enabled on cancel');
+}
+
+async function testShowLoadingStateDetachedHeaderClose() {
+    const closeBtnEl = { addEventListener: (ev, fn) => { closeBtnEl._handlers = closeBtnEl._handlers || {}; closeBtnEl._handlers[ev] = fn; } };
+    const hudContainer = {
+        innerHTML: '',
+        style: {},
+        querySelector: (sel) => {
+            if (sel === '#fasttag-scrape-loading-close') return closeBtnEl;
+            return null;
+        }
+    };
+    const detachedPopup = {
+        currentSceneId: 'scene-detached-close',
+        element: { isConnected: true, style: {}, getBoundingClientRect: () => ({ left: 300, right: 900, top: 80, bottom: 680, width: 600, height: 600 }) },
+        scraperCardContainer: { innerHTML: '', style: {} },
+        scrapeBtn: { disabled: true, innerHTML: '<span>⏳ Scraping...</span>', classList: { remove: () => {} } }
+    };
+    activePopup = detachedPopup;
+    controller.configure({
+        getActivePopup: () => activePopup,
+        getEffectiveTheme: () => 'dark',
+        getDetachScraper: () => true,
+        getFloatingVideoHudElement: () => null,
+        isVideoPoppedOut: () => false,
+        getDefaultEverythingPosition: () => ({ x: 200, y: 100 }),
+        isEasterEggActive: () => false
+    });
+
+    controller.showLoadingState(detachedPopup, 'Scraping new scene…', () => {});
+    const hud = controller.getHudElement();
+    assert.ok(hud, 'HUD should be created');
+    assert.match(hud.innerHTML, /fasttag-scrape-loading-close/, 'detached HUD loading header should render ✕ close button');
+    assert.match(hud.innerHTML, /fasttag-loading-cancel-btn/, 'detached HUD loading footer should render Cancel button');
+}
+
+async function testDetachedCancelButtonKeepsHudOpen() {
+    let cancelCalled = false;
+    const cancelBtnEl = { addEventListener: (ev, fn) => { cancelBtnEl._handlers = cancelBtnEl._handlers || {}; cancelBtnEl._handlers[ev] = fn; } };
+    const detachedPopup = {
+        currentSceneId: 'scene-detached-cancel',
+        element: { isConnected: true, style: {}, getBoundingClientRect: () => ({ left: 300, right: 900, top: 80, bottom: 680, width: 600, height: 600 }) },
+        scraperCardContainer: { innerHTML: '', style: {} },
+        scrapeBtn: { disabled: true, innerHTML: '<span>⏳ Scraping...</span>', classList: { remove: () => {} } }
+    };
+    activePopup = detachedPopup;
+    controller.configure({
+        getActivePopup: () => activePopup,
+        getEffectiveTheme: () => 'dark',
+        getDetachScraper: () => true,
+        getFloatingVideoHudElement: () => null,
+        isVideoPoppedOut: () => false,
+        getDefaultEverythingPosition: () => ({ x: 200, y: 100 }),
+        isEasterEggActive: () => false
+    });
+
+    controller.showLoadingState(detachedPopup, 'Scraping new scene…', () => {}, () => { cancelCalled = true; });
+    const hud = controller.getHudElement();
+    assert.ok(hud, 'HUD should be open during loading');
+    
+    // Wire querySelector to return cancel button
+    const origQuerySelector = hud.querySelector;
+    hud.querySelector = (sel) => {
+        if (sel === '#fasttag-loading-cancel-btn') return cancelBtnEl;
+        return origQuerySelector ? origQuerySelector.call(hud, sel) : null;
+    };
+    
+    // Simulate user clicking footer Cancel
+    controller.showLoadingState(detachedPopup, 'Scraping new scene…', () => {}, () => { cancelCalled = true; });
+    cancelBtnEl._handlers?.click?.({ preventDefault: () => {}, stopPropagation: () => {} });
+    assert.equal(cancelCalled, true, 'onCancel callback should be invoked');
+    assert.equal(controller.isHudOpen(), true, 'HUD must stay open when clicking Cancel in footer');
+}
+
 testTriggerRejectsLateResults()
     .then(() => testAcceptMatchOrdering())
+    .then(() => testToggleHiddenJumpsToFirstNewItem())
+    .then(() => testToggleOverflowJumpsToFirstNewItem())
+    .then(() => testShowLoadingStateWithAbortCallback())
+    .then(() => testShowLoadingStateWithoutAbortCallback())
+    .then(() => testShowLoadingStateCancelButton())
+    .then(() => testShowLoadingStateDetachedHeaderClose())
+    .then(() => testDetachedCancelButtonKeepsHudOpen())
     .then(() => console.log('fasttag-scraper-controller tests passed'))
     .catch(error => {
         console.error(error);

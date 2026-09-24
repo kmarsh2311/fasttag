@@ -77,6 +77,28 @@
         }
     }
 
+    function isCrypticFileName(fileName) {
+        if (!fileName || typeof fileName !== 'string') return false;
+        let name = fileName.replace(/\.[^/.]+$/, '').trim();
+        if (!name) return false;
+        if (/^[a-f0-9]{16,}$/i.test(name) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) return true;
+        const hasReleaseTags = /(?:1080p|720p|2160p|4k|uhd|fhd|x264|x265|hevc|h264|h265|webrip|bluray|dvdrip|pr0n)/i.test(name);
+        const hasBracketsOrHex = /\[[a-f0-9_\-\s]{3,}\]|\b[a-f0-9]{8,}\b/i.test(name);
+        const cleaned = name.replace(/(^|[._\-\s])(1080p|720p|2160p|4k|uhd|fhd|hd|sd|x264|x265|h264|h265|hevc|aac|mp4|mkv|avi|wmv|60fps|120fps|fps|xxx|rip|webrip|bluray|dvdrip|sdh|pr0n)(?=$|[._\-\s])/gi, ' ')
+            .replace(/\[[^\]]+\]|\([^)]+\)/g, ' ')
+            .replace(/[._\-]+/g, ' ')
+            .trim();
+        const tokens = cleaned.split(/\s+/).filter(Boolean);
+        if (tokens.length <= 1) return true;
+        const nonNumberTokens = tokens.filter(t => !/^\d+$/.test(t) && t.toLowerCase() !== 'raw');
+        if (nonNumberTokens.length <= 1) return true;
+        if (hasReleaseTags || hasBracketsOrHex) {
+            const avgLen = nonNumberTokens.reduce((sum, t) => sum + t.length, 0) / nonNumberTokens.length;
+            if (avgLen <= 4 || nonNumberTokens.length <= 2) return true;
+        }
+        return false;
+    }
+
     function buildScrapeCandidateQueries(sceneTitle, sceneFileName, cardText = '') {
         const { cleanTitleForScraping } = getDependencies();
         const candidates = [];
@@ -1129,9 +1151,26 @@
         const cardText = cardElement
             ? (cardElement.querySelector(".title, .card-title, .scene-card__title")?.textContent || "").trim()
             : "";
+        // Apply to all scrapers: cryptic filenames (release codes/hashes) never help any search API
+        const matchingSettings = getMatchingSettings();
+        const shouldSkipCrypticFilename = Boolean(
+            matchingSettings.skipCrypticFilenames !== undefined
+                ? matchingSettings.skipCrypticFilenames !== false
+                : (matchingSettings.skipCrypticFilenamesTPDB !== false)
+        );
+
+        let effectiveFileName = sceneFileName;
+        if (shouldSkipCrypticFilename) {
+            if (sceneTitle && sceneTitle.trim()) {
+                effectiveFileName = '';
+            } else if (isCrypticFileName(sceneFileName)) {
+                effectiveFileName = '';
+            }
+        }
+
         const primaryQueries = cleanedManualQuery
             ? [cleanedManualQuery]
-            : buildScrapeCandidateQueries(sceneTitle, sceneFileName, cardText);
+            : buildScrapeCandidateQueries(sceneTitle, effectiveFileName, cardText);
         const studioPerformerQueries = cleanedManualQuery
             ? []
             : buildStudioPerformerFallbackQueries(localStudio, linkedPerformers, primaryQueries);
@@ -1142,11 +1181,12 @@
             || contextualSearchQuery
             || primaryQueries[0]
             || "";
+        const opaqueQueries = shouldSkipCrypticFilename ? [] : buildOpaqueRecoveryFallbackQueries(primaryQueries);
         let candidateQueries = cleanedManualQuery
             ? primaryQueries
             : Array.from(new Set([
                 ...primaryQueries,
-                ...buildOpaqueRecoveryFallbackQueries(primaryQueries),
+                ...opaqueQueries,
                 ...studioPerformerQueries,
                 contextualSearchQuery,
                 ...buildLinkedPerformerFallbackQueries(linkedPerformers, primaryQueries)
@@ -1154,6 +1194,9 @@
         candidateQueries = Array.from(new Set(candidateQueries.map(dedupeScrapeQueryWords).filter(Boolean)));
         if (!cleanedManualQuery && linkedPerformers.length > 0) {
             candidateQueries = retainOneOpaqueQueryWhenAlternatives(candidateQueries);
+        }
+        if (!cleanedManualQuery && candidateQueries.length > 4) {
+            candidateQueries = candidateQueries.slice(0, 4);
         }
 
         debugTiming("Scrape candidate queries prepared", {
@@ -1428,6 +1471,7 @@
     root.FastTag = root.FastTag || {};
     root.FastTag.scraper = Object.freeze({
         configure,
+        isCrypticFileName,
         buildScrapeCandidateQueries,
         buildLinkedPerformerFallbackQueries,
         buildStudioPerformerFallbackQueries,

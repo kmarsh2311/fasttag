@@ -105,4 +105,15 @@ assert.equal(core.findSceneCardForContextTarget(infoTarget), sceneCard);
 assert.equal(core.isScenePreviewContextTarget(infoTarget, sceneCard), false);
 assert.equal(core.isScenePreviewContextTarget(mediaTarget, sceneCard), true);
 
+// isCrypticFileName tests
+assert.equal(core.isCrypticFileName("eelfie-bfun-1080p-pr0n-x265-[A3F291].mp4"), true, "release acronyms with tags and hash should be cryptic");
+assert.equal(core.isCrypticFileName("V_2023_09_12_raw.mp4"), true, "raw date token should be cryptic");
+assert.equal(core.isCrypticFileName("abc-xyz-1080p.mp4"), true, "short acronyms with 1080p should be cryptic");
+assert.equal(core.isCrypticFileName("01a9b4cf882319efb01239841.mp4"), true, "hex hash filename should be cryptic");
+assert.equal(core.isCrypticFileName("eva_elfie_beach_fun.mp4"), false, "natural language words should not be cryptic");
+assert.equal(core.isCrypticFileName("Brazzers - Eva Elfie - Beach Holiday.mp4"), false, "standard studio title format should not be cryptic");
+assert.equal(core.isCrypticFileName("Tushy - Sunset Beach - 1080p.mp4"), false, "titled scene with 1080p tag should not be cryptic");
+assert.equal(core.isCrypticFileName(""), false);
+assert.equal(core.isCrypticFileName(null), false);
+
 console.log('fasttag-core tests passed');

@@ -351,6 +351,11 @@
                             <input type="checkbox" id="fasttag-match-fill-performer-images" ${getFillMissingPerformerImages() ? 'checked' : ''} style="accent-color:#6366f1; flex-shrink:0;">
                         </label>
 
+                        <label style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; background:${cardBg}; border:1px solid ${border}; border-radius:7px; padding:9px; font-size:11px;">
+                            <span><strong>Skip cryptic / scene filenames</strong><br><span style="color:${textMuted};">Bypass raw filenames containing release codes or scene hashes (e.g. <code>1080p</code>, <code>x265</code>, <code>[A3F291]</code>) on <em>all</em> scrapers. Only searches clean scene titles and studio + performer combinations. Recommended — cryptic filenames never help any search API.</span></span>
+                            <input type="checkbox" id="fasttag-match-skip-cryptic" ${scraperMatching.skipCrypticFilenames !== false ? 'checked' : ''} style="accent-color:#6366f1; flex-shrink:0;">
+                        </label>
+
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; background:${cardBg}; border:1px solid ${border}; border-radius:8px; padding:10px;">
                             <label style="font-size:10.5px; color:${textMuted};">Single-word aliases
                                 <select id="fasttag-match-alias-mode" style="display:block; width:100%; margin-top:4px; padding:5px; border-radius:5px; border:1px solid ${border}; background:${bg}; color:${text};">
@@ -637,7 +642,8 @@
             resultLimit: modal.querySelector('#fasttag-match-result-limit'),
             titleThreshold: modal.querySelector('#fasttag-match-title-threshold'),
             durationThreshold: modal.querySelector('#fasttag-match-duration-threshold'),
-            durationPercent: modal.querySelector('#fasttag-match-duration-percent')
+            durationPercent: modal.querySelector('#fasttag-match-duration-percent'),
+            skipCryptic: modal.querySelector('#fasttag-match-skip-cryptic')
         };
         const matchingSummary = modal.querySelector('#fasttag-matching-preset-summary');
         const matchingPresetDescriptions = {
@@ -657,6 +663,7 @@
             if (matchingControls.titleThreshold) matchingControls.titleThreshold.value = Math.round(settings.titleSimilarityThreshold * 100);
             if (matchingControls.durationThreshold) matchingControls.durationThreshold.value = settings.durationMismatchThreshold;
             if (matchingControls.durationPercent) matchingControls.durationPercent.value = settings.durationMismatchPercent;
+            if (matchingControls.skipCryptic) matchingControls.skipCryptic.checked = settings.skipCrypticFilenames !== false;
             if (matchingSummary) matchingSummary.textContent = matchingPresetDescriptions[settings.preset] || matchingPresetDescriptions.custom;
         };
         const saveCustomMatchingControls = () => {
@@ -670,7 +677,9 @@
                 initialResultLimit: matchingControls.resultLimit?.value,
                 titleSimilarityThreshold: Number(matchingControls.titleThreshold?.value || 0) / 100,
                 durationMismatchThreshold: matchingControls.durationThreshold?.value,
-                durationMismatchPercent: matchingControls.durationPercent?.value
+                durationMismatchPercent: matchingControls.durationPercent?.value,
+                skipCrypticFilenames: Boolean(matchingControls.skipCryptic?.checked),
+                skipCrypticFilenamesTPDB: Boolean(matchingControls.skipCryptic?.checked)
             });
             populateMatchingControls(updated);
         };
@@ -1114,7 +1123,7 @@
             helpBtn.textContent = '⏳ Loading Guide…';
             try {
                 const help = await loadFastTagHelpModule();
-                help.openGuide({ theme: getEffectiveTheme(), version: '4.5.0' });
+                help.openGuide({ theme: getEffectiveTheme(), version: '4.5.1' });
             } catch (error) {
                 toastError(`Unable to open help: ${error.message}`);
             } finally {

@@ -45,9 +45,9 @@
     });
     const MAX_SCRUB_CUE_DISPLAYS = 5;
     const SCRAPER_MATCHING_PRESETS = Object.freeze({
-        conservative: Object.freeze({ preset: 'conservative', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: false, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.1, durationMismatchThreshold: 600, durationMismatchPercent: 35, initialResultLimit: 40, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default' }),
-        balanced: Object.freeze({ preset: 'balanced', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: true, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.2, durationMismatchThreshold: 300, durationMismatchPercent: 25, initialResultLimit: 25, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default' }),
-        strict: Object.freeze({ preset: 'strict', hideObviousFalsePositives: true, singleWordAliasMode: 'ignore', majorCastConflict: true, requireStudioMismatch: false, closeDurationProtects: false, titleSimilarityThreshold: 0.35, durationMismatchThreshold: 120, durationMismatchPercent: 15, initialResultLimit: 15, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default' })
+        conservative: Object.freeze({ preset: 'conservative', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: false, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.1, durationMismatchThreshold: 600, durationMismatchPercent: 35, initialResultLimit: 40, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default', skipCrypticFilenames: true }),
+        balanced: Object.freeze({ preset: 'balanced', hideObviousFalsePositives: true, singleWordAliasMode: 'weak', majorCastConflict: true, requireStudioMismatch: true, closeDurationProtects: true, titleSimilarityThreshold: 0.2, durationMismatchThreshold: 300, durationMismatchPercent: 25, initialResultLimit: 25, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default', skipCrypticFilenames: true }),
+        strict: Object.freeze({ preset: 'strict', hideObviousFalsePositives: true, singleWordAliasMode: 'ignore', majorCastConflict: true, requireStudioMismatch: false, closeDurationProtects: false, titleSimilarityThreshold: 0.35, durationMismatchThreshold: 120, durationMismatchPercent: 15, initialResultLimit: 15, allowStashBoxFallback: false, defaultScraperSource: 'stashbox_default', skipCrypticFilenames: true })
     });
     const DEFAULT_SCRAPER_MATCHING_SETTINGS = SCRAPER_MATCHING_PRESETS.balanced;
     const IDB_NAME = 'stash_fasttag_cache_db';
@@ -195,6 +195,10 @@
             durationMismatchPercent: Math.round(numberInRange(merged.durationMismatchPercent, 25, 0, 100)),
             initialResultLimit: Math.round(numberInRange(merged.initialResultLimit, 25, 5, 100)),
             allowStashBoxFallback: merged.allowStashBoxFallback === true,
+            // Read new key; fall back to old key for users upgrading from 4.5
+            skipCrypticFilenames: settings.skipCrypticFilenames !== undefined
+                ? settings.skipCrypticFilenames !== false
+                : (settings.skipCrypticFilenamesTPDB !== undefined ? settings.skipCrypticFilenamesTPDB !== false : true),
             defaultScraperSource: typeof merged.defaultScraperSource === 'string' ? merged.defaultScraperSource : 'stashbox_default'
         };
     }
@@ -227,6 +231,16 @@
     }
     function resetScraperMatchingSettings() {
         return setScraperMatchingPreset('balanced');
+    }
+    function getSkipCrypticFilenames() {
+        return getScraperMatchingSettings().skipCrypticFilenames !== false;
+    }
+    function setSkipCrypticFilenames(enabled) {
+        setScraperMatchingSettings({
+            skipCrypticFilenames: Boolean(enabled),
+            skipCrypticFilenamesTPDB: Boolean(enabled),
+            preset: 'custom'
+        });
     }
 
     
@@ -443,6 +457,8 @@
         setScraperMatchingSettings,
         setScraperMatchingPreset,
         resetScraperMatchingSettings,
+        getSkipCrypticFilenames,
+        setSkipCrypticFilenames,
         getDefaultScraperSource,
         setDefaultScraperSource,
         getActiveScraperSource,

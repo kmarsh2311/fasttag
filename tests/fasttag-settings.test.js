@@ -36,6 +36,7 @@ assert.match(source, /if \(e\.target === modal\)[\s\S]*closeModal\(\)/, 'setting
 assert.match(source, /saveSpeedsFromInputs\(\)[\s\S]*modal\.remove\(\)/, 'settings closure should persist scrub controls before removal');
 assert.match(source, /setScraperMatchingSettings\(\{[\s\S]*initialResultLimit/, 'custom matching controls should persist as a group');
 assert.match(source, /resetScraperMatchingSettings\(\)/, 'matching defaults should remain restorable');
+assert.match(source, /id="fasttag-match-skip-cryptic"/, 'settings should include skip cryptic filename setting');
 assert.match(source, /promptDebugModeWarningDialog\(\)/, 'enabling debug mode should retain its warning gate');
 assert.match(source, /await callGeminiAPI\(/, 'Gemini connection testing should remain asynchronous');
 assert.match(source, /setThemePreference\(e\.target\.value\);[\s\S]*closeModal\(\);[\s\S]*setTimeout\(\(\) => open\(options\), 0\)/, 'theme changes should rebuild the inline-coloured settings modal immediately');
@@ -56,7 +57,8 @@ const matching = {
     titleSimilarityThreshold: 0.2,
     durationMismatchThreshold: 300,
     durationMismatchPercent: 25,
-    initialResultLimit: 25
+    initialResultLimit: 25,
+    skipCrypticFilenames: true
 };
 root.FastTag.settings.open({
     cacheStore: {},

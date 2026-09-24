@@ -1002,7 +1002,117 @@ function testDefaultScraperSourcePrecedence() {
     assert.equal(scraper.resolveActiveSource(sources, 'Men.com').id, 'scraper:Men', 'matching by scraper name Men.com');
 }
 
+async function testSkipCrypticFilenamesOnTPDB() {
+    const executedQueries = [];
+    scraper.configure({
+        cleanTitleForScraping: (v) => v ? v.replace(/[._\-\s]+/g, " ").trim() : "",
+        parseDurationSec: () => 1200,
+        getScraperMatchingSettings: () => ({ skipCrypticFilenames: true }),
+        fetchGQL: async (query, vars) => {
+            if (query.includes("findScene")) {
+                return {
+                    data: {
+                        findScene: {
+                            id: "scene-tpdb",
+                            title: "Clean Scene Title",
+                            studio: { id: "10", name: "Brazzers" },
+                            performers: [{ id: "1", name: "Eva Elfie" }],
+                            files: [{ path: "/videos/eelfie-bfun-1080p-pr0n-x265-[A3F291].mp4", duration: 1200, fingerprints: [] }]
+                        }
+                    }
+                };
+            }
+            if (query.includes("scrapeSingleScene")) {
+                if (vars?.input?.query) {
+                    executedQueries.push(vars.input.query);
+                }
+                return { data: { scrapeSingleScene: [] } };
+            }
+            // Return ThePornDB as the configured stash-box so the internal
+            // loadScraperSources picks it up and isSlowOrTPDB evaluates correctly
+            if (query.includes("FastTagScraperSources")) {
+                return {
+                    data: {
+                        configuration: {
+                            general: {
+                                stashBoxes: [{ name: "ThePornDB", endpoint: "https://api.theporndb.net/graphql" }]
+                            }
+                        }
+                    }
+                };
+            }
+            if (query.includes("FastTagInstalledScrapers")) {
+                return { data: { listScrapers: [] } };
+            }
+            return { data: {} };
+        }
+    });
+
+    await scraper.fetchScraperMatchesForScene("scene-tpdb", null, "", () => true, "stashbox_tpdb");
+
+    // Clean title should be queried, but the cryptic filename eelfie-bfun-1080p-pr0n-x265-[A3F291] should be skipped
+    assert.ok(executedQueries.includes("Clean Scene Title"), "scene title should be queried");
+    assert.ok(!executedQueries.some(q => q.includes("eelfie")), "cryptic filename should be omitted for all scrapers when skipCrypticFilenames is active");
+    assert.ok(!executedQueries.some(q => q.includes("A3F291")), "hex codes should be omitted");
+}
+
+async function testAutomatedCandidateQueriesCapped() {
+    const executedQueries = [];
+    scraper.configure({
+        cleanTitleForScraping,
+        parseDurationSec,
+        getScraperMatchingSettings: () => ({ skipCrypticFilenames: true }),
+        fetchGQL: async (query, vars) => {
+            if (query.includes("findScene")) {
+                return {
+                    data: {
+                        findScene: {
+                            id: "scene-multi",
+                            title: "Multi Star Scene",
+                            studio: { id: "10", name: "Brazzers" },
+                            performers: [
+                                { id: "1", name: "Performer One", alias_list: ["Alias One", "Alias Two"] },
+                                { id: "2", name: "Performer Two", alias_list: ["Alias Three"] },
+                                { id: "3", name: "Performer Three", alias_list: [] }
+                            ],
+                            files: [{ path: "/videos/multi_star_scene.mp4", duration: 1200, fingerprints: [] }]
+                        }
+                    }
+                };
+            }
+            if (query.includes("scrapeSingleScene")) {
+                if (vars?.input?.query) {
+                    executedQueries.push(vars.input.query);
+                }
+                return { data: { scrapeSingleScene: [] } };
+            }
+            if (query.includes("FastTagScraperSources")) {
+                return {
+                    data: {
+                        configuration: {
+                            general: {
+                                stashBoxes: [{ name: "StashDB", endpoint: "https://stashdb.org/graphql" }]
+                            }
+                        }
+                    }
+                };
+            }
+            if (query.includes("FastTagInstalledScrapers")) {
+                return { data: { listScrapers: [] } };
+            }
+            return { data: {} };
+        }
+    });
+
+    await scraper.fetchScraperMatchesForScene("scene-multi", null, "", () => true, "stashbox_0");
+
+    assert.ok(executedQueries.length > 0, "should execute queries");
+    assert.ok(executedQueries.length <= 4, "automated candidate queries should be capped at 4 to prevent slow sequential cascades, got: " + executedQueries.length);
+}
+
 Promise.resolve()
+    .then(testSkipCrypticFilenamesOnTPDB)
+    .then(testAutomatedCandidateQueriesCapped)
     .then(testHashMatch)
     .then(testSingleSourceNoAutoLoopAndTargetedScraping)
     .then(testStashBoxFallbackWhenEnabled)

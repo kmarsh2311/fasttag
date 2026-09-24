@@ -140,6 +140,24 @@ assert.equal(customMatching.titleSimilarityThreshold, 0, 'custom title threshold
 assert.equal(customMatching.durationMismatchPercent, 100, 'custom duration percentage should be clamped');
 assert.equal(storage.resetScraperMatchingSettings().preset, 'balanced');
 
+// Scraper matching skipCrypticFilenames setting tests (applies to all scrapers)
+assert.equal(storage.getSkipCrypticFilenames(), true, "skipCrypticFilenames should default to true");
+storage.setSkipCrypticFilenames(false);
+assert.equal(storage.getSkipCrypticFilenames(), false);
+assert.equal(storage.getScraperMatchingSettings().skipCrypticFilenames, false);
+assert.equal(storage.getScraperMatchingSettings().preset, "custom");
+storage.resetScraperMatchingSettings();
+assert.equal(storage.getSkipCrypticFilenames(), true);
+
+// Backward-compat: new key takes precedence even if legacy key was false in stored json
+values.set('fasttag_scraper_matching_settings_v1', JSON.stringify({ skipCrypticFilenames: true, skipCrypticFilenamesTPDB: false }));
+assert.equal(storage.getSkipCrypticFilenames(), true, 'new skipCrypticFilenames=true must take precedence over legacy false');
+
+// Legacy fallback: if new key is absent, old key is respected
+values.set('fasttag_scraper_matching_settings_v1', JSON.stringify({ skipCrypticFilenamesTPDB: false }));
+assert.equal(storage.getSkipCrypticFilenames(), false, 'legacy false must be respected when new key absent');
+storage.resetScraperMatchingSettings();
+
 async function testPersistentCache() {
     assert.equal(await storage.idbGet('tags'), null, 'IndexedDB should fall back cleanly when unavailable');
 
