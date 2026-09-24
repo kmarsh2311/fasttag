@@ -21,6 +21,35 @@ import socketserver
 PORT = 9998
 WS_MAGIC_STRING = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+def get_runtime_dir():
+    dot_stash = os.path.expanduser("~/.stash")
+    try:
+        os.makedirs(dot_stash, exist_ok=True)
+        return dot_stash
+    except Exception:
+        pass
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        test_file = os.path.join(plugin_dir, ".perm_test")
+        with open(test_file, "w") as f:
+            f.write("")
+        os.remove(test_file)
+        return plugin_dir
+    except Exception:
+        pass
+    import tempfile
+    return tempfile.gettempdir()
+
+LOG_FILE = os.path.join(get_runtime_dir(), "fasttag_gemini_bridge.log")
+
+def bridge_log(msg):
+    try:
+        with open(LOG_FILE, "a") as f:
+            tname = getattr(threading.current_thread(), "name", "main")
+            f.write(f"[{tname}] {msg}\n")
+    except Exception:
+        pass
+
 AVAILABLE_MODELS_CACHE = {} # api_key -> list of valid model names
 
 def get_available_models(api_key):
@@ -38,14 +67,10 @@ def get_available_models(api_key):
                 and not any(bad in m.get("name", "").lower() for bad in ["tts", "audio", "image", "embedding", "aqa", "realtime", "robotics"])
             ]
             AVAILABLE_MODELS_CACHE[api_key] = models
-            log_path = os.path.expanduser("~/.stash/fasttag_gemini_bridge.log")
-            with open(log_path, "a") as f:
-                f.write(f"AVAILABLE MODELS FOR KEY: {models}\n")
+            bridge_log(f"AVAILABLE MODELS FOR KEY: {models}")
             return models
     except Exception as e:
-        log_path = os.path.expanduser("~/.stash/fasttag_gemini_bridge.log")
-        with open(log_path, "a") as f:
-            f.write(f"ERROR FETCHING MODELS: {e}\n")
+        bridge_log(f"ERROR FETCHING MODELS: {e}")
         return []
 
 def get_ordered_candidate_models(api_key, requested_model=None):
@@ -123,13 +148,7 @@ Extract and return a valid JSON object matching this schema:
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1}
     }).encode("utf-8")
 
-    log_path = os.path.expanduser("~/.stash/fasttag_gemini_bridge.log")
-    def log(msg):
-        try:
-            with open(log_path, "a") as f:
-                f.write(f"[{threading.current_thread().name}] {msg}\n")
-        except Exception:
-            pass
+    log = bridge_log
 
     log(f"Received {req_type} request. Model requested: '{req_model}', filename: '{filename}'")
 

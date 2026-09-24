@@ -7,7 +7,26 @@ import sys
 import subprocess
 import signal
 
-PID_FILE = os.path.expanduser("~/.stash/fasttag_gemini_bridge.pid")
+def get_runtime_dir():
+    dot_stash = os.path.expanduser("~/.stash")
+    try:
+        os.makedirs(dot_stash, exist_ok=True)
+        return dot_stash
+    except Exception:
+        pass
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        test_file = os.path.join(plugin_dir, ".perm_test")
+        with open(test_file, "w") as f:
+            f.write("")
+        os.remove(test_file)
+        return plugin_dir
+    except Exception:
+        pass
+    import tempfile
+    return tempfile.gettempdir()
+
+PID_FILE = os.path.join(get_runtime_dir(), "fasttag_gemini_bridge.pid")
 BRIDGE_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fasttag_gemini_bridge.py")
 
 def is_running(pid):
