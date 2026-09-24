@@ -44,12 +44,29 @@
             <p>FastTag prefers Full Video for the highest-quality capture. If it is unavailable, an MP4 preview supports Play/Pause, stepping, scrubbing and Capture Preview Frame. An animated WebP cannot be paused or scrubbed, but Capture Preview Frame saves the animation frame currently visible. Preview captures can be lower resolution and are labelled as such.</p>
             <p>Alternatively, upload a JPEG/PNG/WebP image, drop an image file onto New Cover, or use a clipboard image. Review the proposed cover and select Set Cover; saving updates Current Cover while leaving the editor open for continued navigation. Closing with an unsaved proposed cover asks before discarding it, including when the parent popup is closed. On localhost or HTTPS, Paste can normally read the clipboard directly after browser permission. On an HTTP LAN address, select Paste and then press Ctrl+V or Cmd+V when prompted. This works with any LAN IP or hostname.</p>
         ` },
-        { id: 'scraping', icon: '⚡', title: 'StashDB and Scraping', html: `
-            <p>Scraping is available only in Edit Everything so every returned field can be reviewed. FastTag first attempts Stash’s scene lookup and then uses cleaned title or filename search terms. The optional search field lets you correct difficult filenames without changing the scene first.</p>
-            <h3>Evidence labels</h3>
-            <ul><li><strong>Verified Fingerprint</strong> means a returned fingerprint was actually compared with and matched the local file.</li><li><strong>Scene Lookup</strong> means Stash found results from the scene lookup; it is not presented as fingerprint verification.</li><li><strong>Keyword Search</strong> means words from a title, filename, or manual query found the result.</li><li><strong>Performer Match</strong> shows overlap with performers already linked locally.</li><li><strong>Studio/Duration Mismatch</strong> identifies objective conflicts.</li><li><strong>Limited Comparison</strong> means some local evidence was unavailable.</li></ul>
+        { id: 'scraping', icon: '⚡', title: 'Scene Scraping & Scrapers', html: `
+            <p>Scraping is integrated into Edit Everything so all returned metadata can be reviewed before saving. FastTag supports both <strong>Stash-box endpoints</strong> (StashDB.org, etc.) and all installed <strong>community & custom studio scrapers</strong>.</p>
+            <h3>Interactive Scraper Selector</h3>
+            <p>Switch your active scraper source at any time from the scraper button in the idle card header, match results HUD, or empty results card. Click the button to open a compact, searchable dropdown: type to filter scrapers in real-time, press <kbd>Enter</kbd> to pick the first match, or press <kbd>Esc</kbd> to close.</p>
+            <h3>Scraper Types & URL Routing</h3>
+            <ul>
+                <li><strong>⚡ Search-Capable Scrapers:</strong> Support scene title, keyword, and filename searches (e.g. StashDB.org, Men.com).</li>
+                <li><strong>🔗 URL-Only Scrapers:</strong> Studio scrapers that require a direct video webpage link and do not support keyword search (tagged with a cyan <strong>[URL]</strong> badge). When chosen, the search bar adapts to prompt for a direct video link.</li>
+                <li><strong>Direct URL Scraping:</strong> Pasting any <code>http://</code> or <code>https://</code> link into the search bar automatically routes the query to Stash’s native URL scraper for that source.</li>
+            </ul>
+            <h3>Configuration & Precedence</h3>
+            <p>Configure your <strong>Default Scraper Source</strong> under Settings → Scraper. Choosing another scraper on any scene immediately overrides the default for that scene. Moving to another scene starts fresh on your configured default unless <strong>Remember Last Used Scraper</strong> is enabled. If Stash-box Fallback is enabled, FastTag automatically checks StashDB when a community scraper returns no results.</p>
+            <h3>Evidence Labels & Assessments</h3>
+            <ul>
+                <li><strong>Verified Fingerprint:</strong> A returned fingerprint was compared with and matched the local file.</li>
+                <li><strong>Scene Lookup:</strong> Stash found results from scene lookup (not presented as fingerprint verification).</li>
+                <li><strong>Keyword Search:</strong> Query words found the result.</li>
+                <li><strong>Performer Match:</strong> Shows overlap with performers already linked locally.</li>
+                <li><strong>Studio/Duration Mismatch:</strong> Highlights objective conflicts.</li>
+            </ul>
             <p>Strong, Likely, Possible, and Likely Wrong Scene assessments combine available evidence. All results remain reviewable; a warning never silently blocks acceptance.</p>
-            <h3>Saving scraper fields</h3><p>Checkboxes control title, date, cover, studio, performers, tags, and details where shown. Existing performers and tags are merged with selected scraped values. Cover images save separately so an image failure does not prevent other metadata from saving.</p>
+            <h3>Saving Scraper Fields</h3>
+            <p>Checkboxes control title, date, cover, studio, performers, tags, and details. Existing performers and tags are merged with selected scraped values. Cover images save separately so an image failure does not prevent other metadata from saving.</p>
         ` },
         { id: 'ai', icon: '✨', title: 'Gemini AI Parse', html: `
             <p>AI Parse asks Google Gemini to extract a clean title, date, studio, performers, and tags from the current filename and title. Suggestions are a review aid, not authoritative metadata.</p>

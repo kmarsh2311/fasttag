@@ -48,9 +48,36 @@ When the Edit Everything next/previous controls move to another scene, an open C
 
 FastTag prefers the full-video stream for the highest-quality frame capture. If that stream is unavailable or the browser cannot play its format, an MP4 preview becomes the fallback player with Play/Pause, frame stepping, timeline and wheel scrubbing, and **Capture Preview Frame**. If the fallback is an animated WebP image, it cannot be paused or scrubbed, but **Capture Preview Frame** captures the animation frame visible when the button is pressed. Preview captures are identified in the proposed-cover status and can be lower resolution. Upload, Paste and Drop remain available when no preview can be captured.
 
-## StashDB scraping
+## Scene scraping & multi-source support
 
-Scraping is restricted to Edit Everything so all returned fields can be reviewed. FastTag attempts Stash scene lookup, then cleaned title/filename and contextual keyword searches. When a studio or performers are linked, the editable search box is prefilled with the studio and all linked performer names; individual-performer searches remain automatic fallbacks.
+Scraping is integrated into Edit Everything so all returned metadata can be reviewed before saving. FastTag supports both **Stash-box endpoints** (such as StashDB.org) and **installed community & custom scrapers** (such as studio-specific scrapers). FastTag attempts scene lookup (by hashes/fingerprints where supported), followed by cleaned title, filename, and contextual keyword searches. When a studio or performers are linked, the editable search box is prefilled with the studio and linked performer names; individual-performer searches serve as automatic fallbacks.
+
+### Interactive scraper selection & switching
+
+You can select or switch your scraper source at any time without closing the editor:
+- **Idle Card Header**: When automatic sequential scraping is disabled, FastTag displays an idle test pattern card. The header includes an interactive scraper button (`⚡ StashDB ▼`) allowing you to pick your desired scraper *before* clicking `⚡ Scrape`.
+- **Match Card Header**: The top-right header of the scraper HUD displays the active scraper button. Click it to switch to any other source and immediately re-query the scene.
+- **Empty Card**: If no matches are found, the empty search card displays the active scraper button. You can switch to another scraper or refine your search query in-place.
+- **Searchable Scraper Picker**: Clicking the scraper button opens a compact, searchable dropdown:
+  - Type in the search box to filter scrapers in real-time.
+  - Press <kbd>Enter</kbd> to automatically select the top matching scraper.
+  - Press <kbd>Esc</kbd> to dismiss the menu.
+
+### Scraper types & visual indicators
+
+FastTag automatically inspects each scraper's capabilities in Stash and visually categorises them:
+- **`⚡` Search-Capable Scrapers**: Support searching by title, scene name, or keywords (e.g., *StashDB.org*, *Men.com*, *Adult Time*).
+- **`🔗` URL-Only Scrapers**: Studio scrapers that require a direct video webpage link and do not support text search (e.g., *TitanMen*, *Corbin Fisher*, *Colby Knox*). Displayed with a `🔗` link icon and a cyan **`[URL]`** / **`URL ONLY`** badge.
+- **Adaptive URL Input**: When a URL-only scraper is selected, FastTag adapts the query input placeholder to `Paste video URL to scrape (https://...)` and displays clear guidance to paste a direct link.
+- **Direct Video URL Scraping**: Pasting any valid `http://` or `https://` video URL into the scraper query box automatically routes the query to Stash's native URL scraper engine for that scraper.
+
+### Default scraper settings & override behaviour
+
+Configure scraper defaults in **Settings → Scraper**:
+- **Default Scraper Source**: Choose your preferred default from a compact, searchable picker—either **Default Stash-box (StashDB.org)**, **Remember Last Used Scraper**, or any specific installed scraper.
+- **Scene-Level Manual Override**: Even when a default scraper is configured, you can freely search for and pick any other scraper from the dropdown on any scene. Your manual selection takes immediate effect on that scene.
+- **Navigation Lifecycle**: When navigating to another scene in sequential mode, FastTag automatically resets to your configured default scraper (so new scenes start clean). If **Remember Last Used Scraper** is selected in Settings, your last-chosen scraper carries forward across scenes.
+- **Stash-box Fallback**: When enabled, if an installed studio scraper returns no results, FastTag automatically falls back to your default Stash-box to find candidate matches.
 
 Use the scraper header's **Dock** control to move the results between the editor and a draggable, resizable HUD. The detached scraper HUD belongs to the open Edit Everything popup: closing that popup also closes its scraper HUD, including when a search is still running. Reopen Edit Everything and scrape again if you want to resume reviewing the session's cached results.
 

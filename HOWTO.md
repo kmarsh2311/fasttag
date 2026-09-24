@@ -16,6 +16,7 @@ Welcome to the comprehensive guide for **FastTag**, the fast tagging and metadat
 9. [⌨️ Keyboard Shortcuts Reference](#️-keyboard-shortcuts-reference)
 10. [📐 Window Resizing & Viewport Controls](#-window-resizing--viewport-controls)
 11. [🎨 Themes & Settings](#-themes--settings)
+12. [⚡ Scene Scraping & Community Scrapers](#-scene-scraping--community-scrapers)
 
 ---
 
@@ -176,6 +177,33 @@ FastTag provides a dedicated settings modal accessible directly from the context
   - **Dark (Slate & Indigo)**
   - **Light (Clean White & Slate)**
   - **Match Stash UI (Automatically syncs with Stash theme)**
+
+---
+
+## ⚡ Scene Scraping & Community Scrapers
+
+FastTag provides a comprehensive scraping engine inside `⚡ Edit Everything`, supporting both Stash-box endpoints and all installed community/studio scrapers:
+
+### 1. Interactive Scraper Selector
+* **Pre-Scrape Selection**: When automatic sequential scraping is off, the idle card header includes a scraper button (`⚡ StashDB ▼`). Choose your target scraper *before* clicking `⚡ Scrape`.
+* **In-Flight Switching**: When reviewing matches or on an empty result card, click the active scraper button in the top-right header to switch scrapers immediately without losing your context.
+* **Searchable Dropdown**:
+  - Type to filter scrapers in real-time.
+  - Press <kbd>Enter</kbd> to automatically select the first matching scraper.
+  - Press <kbd>Esc</kbd> to dismiss.
+
+### 2. Scraper Types & Icons
+* **`⚡` Search Scrapers**: Queryable by scene title, keywords, or cleaned filename (e.g. *StashDB.org*, *Men.com*, *Adult Time*).
+* **`🔗` URL-Only Scrapers**: Studio scrapers that only accept direct video webpage links (e.g. *TitanMen*, *Corbin Fisher*, *Colby Knox*). Tagged with a cyan **`[URL]`** badge. When selected, the search box prompts you to paste the video URL.
+
+### 3. Direct URL Pasting
+* Paste any `http://` or `https://` video link into the search bar at any time. FastTag automatically routes the link to Stash's native URL scraper for the selected source.
+
+### 4. Configuration & Precedence
+* **Default Scraper Source**: Set your preferred default under **Settings ➔ Scraper** using the compact searchable picker.
+* **Scene-Level Override**: Manually choosing a scraper on any scene overrides your default immediately for that scene.
+* **Sequential Navigation**: Moving to another scene resets back to your configured default unless **Remember Last Used Scraper** is enabled in Settings.
+* **Stash-box Fallback**: If enabled in Settings, FastTag automatically checks StashDB whenever an installed community scraper returns no matches.
 
 ---
 
